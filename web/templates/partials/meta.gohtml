@@ -1,0 +1,20 @@
+{{/* The footer shown under a page and under its history. Takes a dict of
+     "Path" (the repository path), "Commit" (the most recent commit) and
+     "HasHistory" (whether that commit exists). */}}
+{{define "page-meta" -}}
+<div class="page-meta">
+  <div>
+    {{if .HasHistory -}}
+    Last changed {{formatDate .Commit.When}} by {{.Commit.Author}}
+    &mdash; <code>{{.Commit.Short}}</code> {{.Commit.Subject}}
+    {{- else -}}
+    Not committed yet
+    {{- end}}
+  </div>
+  <div class="page-actions">
+    <a href="/raw/{{.Path}}">Source</a>
+    <a href="/history/{{.Path}}">History</a>
+    <span class="muted" title="Repository path">{{.Path}}</span>
+  </div>
+</div>
+{{- end}}

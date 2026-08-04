@@ -427,14 +427,53 @@ func crumbHref(t *testing.T, body, name string) string {
 	return tag[:quote]
 }
 
-// The history view has its own repository path, which must not be mistaken for
-// the request path the breadcrumb trail compares against.
-func TestHistoryShowsRepositoryPath(t *testing.T) {
-	body := get(t, newTestServer(t), "/history/docs/setup").Body.String()
+// The history view carries the same footer as a page: the last change, a link
+// to the source, a self-referencing history link and the repository path. The
+// history view's own RepoPath field must not be mistaken for the request path
+// the breadcrumb trail compares against.
+func TestHistoryFooterMatchesAPage(t *testing.T) {
+	srv := newTestServer(t)
 
-	if !strings.Contains(body, "<code>docs/setup.md</code>") {
-		t.Error("history view does not show the repository path")
+	pageFooter := footer(t, get(t, srv, "/wiki/docs/setup").Body.String())
+	histFooter := footer(t, get(t, srv, "/history/docs/setup.md").Body.String())
+
+	if pageFooter != histFooter {
+		t.Errorf("footers differ:\npage:    %s\nhistory: %s", pageFooter, histFooter)
 	}
+	for _, want := range []string{
+		`<a href="/raw/docs/setup.md">Source</a>`,
+		`<a href="/history/docs/setup.md">History</a>`,
+		`<span class="muted" title="Repository path">docs/setup.md</span>`,
+		"Last changed 2026-03-04 by Ada",
+	} {
+		if !strings.Contains(histFooter, want) {
+			t.Errorf("history footer is missing %q:\n%s", want, histFooter)
+		}
+	}
+
+	// The old in-article file name and back link are gone.
+	body := get(t, srv, "/history/docs/setup.md").Body.String()
+	article := body[strings.Index(body, "<article"):strings.Index(body, "</article>")]
+	if strings.Contains(article, "back to the page") {
+		t.Error("history article still holds the back link")
+	}
+	if strings.Contains(article, "docs/setup.md") {
+		t.Errorf("history article still repeats the file name:\n%s", article)
+	}
+}
+
+// footer returns the page-meta block of a rendered page.
+func footer(t *testing.T, body string) string {
+	t.Helper()
+	start := strings.Index(body, `<div class="page-meta">`)
+	if start < 0 {
+		t.Fatalf("no page-meta footer in:\n%s", body)
+	}
+	end := strings.Index(body[start:], "</div>\n</div>")
+	if end < 0 {
+		t.Fatal("page-meta footer is not closed as expected")
+	}
+	return body[start : start+end]
 }
 
 // A history link names the source file, so the home page — whose slug is empty
@@ -463,9 +502,10 @@ func TestHomePageHistory(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		"<code>README.md</code>",
 		"write the docs", // the commit subject from the fake source
-		`<a href="/">back to the page</a>`,
+		// The footer names the file and links back to its source.
+		`<a href="/raw/README.md">Source</a>`,
+		`<span class="muted" title="Repository path">README.md</span>`,
 		// Breadcrumbs follow the page's slug, not the file name, and the
 		// history view is not itself one of its crumbs.
 		`<a href="/">Home</a>`,

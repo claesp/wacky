@@ -6,19 +6,5 @@
   {{.Doc.HTML}}
 </article>
 
-<div class="page-meta">
-  <div>
-    {{if .HasHistory -}}
-    Last changed {{formatDate .LastCommit.When}} by {{.LastCommit.Author}}
-    &mdash; <code>{{.LastCommit.Short}}</code> {{.LastCommit.Subject}}
-    {{- else -}}
-    Not committed yet
-    {{- end}}
-  </div>
-  <div class="page-actions">
-    <a href="/raw/{{.Page.Path}}">Source</a>
-    <a href="/history/{{.Page.Path}}">History</a>
-    <span class="muted" title="Repository path">{{.Page.Path}}</span>
-  </div>
-</div>
+{{template "page-meta" dict "Path" .Page.Path "Commit" .LastCommit "HasHistory" .HasHistory}}
 {{- end}}

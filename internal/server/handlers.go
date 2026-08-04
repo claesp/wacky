@@ -83,6 +83,10 @@ type historyView struct {
 	Page        *wiki.Page
 	Commits     []git.Commit
 	Breadcrumbs []wiki.Breadcrumb
+	// LastCommit is Commits[0], carried separately so the footer partial can
+	// be shared with the page view.
+	LastCommit git.Commit
+	HasHistory bool
 }
 
 type errorView struct {
@@ -257,13 +261,18 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.write(w, r, http.StatusOK, "history.gohtml", historyView{
+	view := historyView{
 		layout:      s.layout(r, "History of "+path.Base(repoPath), crumbPath),
 		RepoPath:    repoPath,
 		Page:        page,
 		Commits:     commits,
 		Breadcrumbs: s.store.Breadcrumbs(crumbPath),
-	})
+	}
+	if len(commits) > 0 {
+		view.LastCommit = commits[0]
+		view.HasHistory = true
+	}
+	s.write(w, r, http.StatusOK, "history.gohtml", view)
 }
 
 // handleRaw serves the bytes of any file in the repository.

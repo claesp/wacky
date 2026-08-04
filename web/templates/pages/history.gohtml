@@ -3,7 +3,6 @@
 
 <article class="page">
   <h1>History</h1>
-  <p class="muted"><code>{{.RepoPath}}</code>{{with .Page}} &mdash; <a href="{{.URL}}">back to the page</a>{{end}}</p>
 
   {{if .Commits}}
   <div class="table-wrap">
@@ -27,4 +26,6 @@
   <p>This file has no commits yet.</p>
   {{end}}
 </article>
+
+{{template "page-meta" dict "Path" .RepoPath "Commit" .LastCommit "HasHistory" .HasHistory}}
 {{- end}}
