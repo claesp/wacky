@@ -115,6 +115,10 @@ type historyView struct {
 	// be shared with the page view.
 	LastCommit git.Commit
 	HasHistory bool
+	// Truncated reports that the file has more commits than Limit, which is
+	// the number actually listed.
+	Truncated bool
+	Limit     int
 }
 
 type errorView struct {
@@ -282,11 +286,19 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := s.timeoutFor(r)
 	defer cancel()
-	commits, err := s.store.History(ctx, repoPath, s.cfg.HistoryLimit)
+
+	// One commit beyond the limit is enough to know the history is longer,
+	// without counting the whole thing.
+	limit := s.cfg.HistoryLimit
+	commits, err := s.store.History(ctx, repoPath, limit+1)
 	if err != nil {
 		s.log.Error("read history", "path", repoPath, "error", err)
 		s.renderError(w, r, http.StatusInternalServerError, "The history could not be read.")
 		return
+	}
+	truncated := len(commits) > limit
+	if truncated {
+		commits = commits[:limit]
 	}
 
 	view := historyView{
@@ -296,6 +308,8 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		Page:        page,
 		Commits:     commits,
 		Breadcrumbs: s.store.Breadcrumbs(crumbPath),
+		Truncated:   truncated,
+		Limit:       limit,
 	}
 	if len(commits) > 0 {
 		view.LastCommit = commits[0]

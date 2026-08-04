@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html"
 	"io"
 	"log/slog"
@@ -21,7 +22,11 @@ import (
 )
 
 // fakeSource satisfies wacky.Source without touching a real repository.
-type fakeSource struct{ files map[string]string }
+type fakeSource struct {
+	files map[string]string
+	// commits is how much history every file has. Zero means one commit.
+	commits int
+}
 
 func (f *fakeSource) Root() string { return "/fake/repo" }
 func (f *fakeSource) Ref() string  { return "" }
@@ -52,11 +57,33 @@ func (f *fakeSource) Read(_ context.Context, rel string) ([]byte, error) {
 	return []byte(content), nil
 }
 
-func (f *fakeSource) Log(context.Context, string, int) ([]git.Commit, error) {
-	return []git.Commit{{
-		Hash: "0123456789abcdef", Author: "Ada", Email: "ada@example.com",
-		When: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC), Subject: "write the docs",
-	}}, nil
+// Log honours the limit the caller asks for, so the truncation notice can be
+// exercised the same way the real repository would drive it.
+func (f *fakeSource) Log(_ context.Context, _ string, limit int) ([]git.Commit, error) {
+	total := f.commits
+	if total < 1 {
+		total = 1
+	}
+	if limit > 0 && limit < total {
+		total = limit
+	}
+
+	out := make([]git.Commit, 0, total)
+	for i := 0; i < total; i++ {
+		c := git.Commit{
+			Hash:    fmt.Sprintf("%016d", i),
+			Author:  "Ada",
+			Email:   "ada@example.com",
+			When:    time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC),
+			Subject: fmt.Sprintf("edit number %d", i),
+		}
+		// The newest commit keeps fixed values the other tests assert on.
+		if i == 0 {
+			c.Hash, c.Subject = "0123456789abcdef", "write the docs"
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func (f *fakeSource) Head(context.Context) (git.Commit, error) {
@@ -558,6 +585,91 @@ func TestHistoryHeadings(t *testing.T) {
 			t.Errorf("GET %s: History is still the top-level heading", tt.target)
 		}
 	}
+}
+
+// The subject carries the commit link, so the separate Commit column is gone
+// and the full hash lives in the title either way.
+func TestHistoryTableLinksTheSubject(t *testing.T) {
+	const base = "https://github.com/org/repo/commit/"
+	const hash = "0123456789abcdef"
+
+	srv := newTestServer(t)
+	srv.cfg.CommitURL = base
+	body := get(t, srv, "/history/docs/setup.md").Body.String()
+
+	want := `<a class="commit" href="` + base + hash + `" rel="noopener noreferrer" title="` + hash + `">write the docs</a>`
+	if !strings.Contains(body, want) {
+		t.Errorf("the subject is not a commit link:\n%s", body)
+	}
+	if strings.Contains(body, "<th>Commit</th>") {
+		t.Error("the Commit column is still there")
+	}
+	if !strings.Contains(body, "<tr><th>When</th><th>Author</th><th>Subject</th></tr>") {
+		t.Errorf("unexpected table header:\n%s", body)
+	}
+
+	// Without a commit URL the subject stays plain, but keeps the hash.
+	plain := get(t, newTestServer(t), "/history/docs/setup.md").Body.String()
+	if !strings.Contains(plain, `<span title="`+hash+`">write the docs</span>`) {
+		t.Errorf("the unlinked subject lost its hash:\n%s", plain)
+	}
+}
+
+// A file with more history than the limit lists the limit and says so.
+func TestHistoryTruncationNotice(t *testing.T) {
+	newServer := func(t *testing.T, commits, limit int) *Server {
+		t.Helper()
+		src := &fakeSource{
+			files:   map[string]string{"README.md": "# Handbook\n"},
+			commits: commits,
+		}
+		log := slog.New(slog.NewTextHandler(io.Discard, nil))
+		store := wacky.NewStore(src, markdown.New(), log)
+		if err := store.Reload(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		cfg := config.Default()
+		cfg.HistoryLimit = limit
+
+		srv, err := New(cfg, store, log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return srv
+	}
+
+	t.Run("more commits than the limit", func(t *testing.T) {
+		body := get(t, newServer(t, 50, 5), "/history/README.md").Body.String()
+
+		if !strings.Contains(body, "Only showing the latest 5 commits") {
+			t.Errorf("no truncation notice:\n%s", body)
+		}
+		if got := strings.Count(body, "<tr>") - 2; got != 5 { // header and notice rows
+			t.Errorf("listed %d commits, want 5", got)
+		}
+		// The extra commit fetched to detect truncation must not be listed.
+		if strings.Contains(body, "edit number 5") {
+			t.Error("the look-ahead commit was rendered")
+		}
+	})
+
+	t.Run("exactly the limit", func(t *testing.T) {
+		body := get(t, newServer(t, 5, 5), "/history/README.md").Body.String()
+
+		if strings.Contains(body, "Only showing") {
+			t.Errorf("truncation notice on a complete history:\n%s", body)
+		}
+		if !strings.Contains(body, "edit number 4") {
+			t.Error("the oldest commit is missing")
+		}
+	})
+
+	t.Run("fewer commits than the limit", func(t *testing.T) {
+		body := get(t, newServer(t, 2, 5), "/history/README.md").Body.String()
+		if strings.Contains(body, "Only showing") {
+			t.Errorf("truncation notice on a short history:\n%s", body)
+		}
+	})
 }
 
 // Slug-form history URLs predate the file-form ones and must keep working.

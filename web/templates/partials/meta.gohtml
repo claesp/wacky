@@ -8,6 +8,16 @@
 {{- end -}}
 {{end}}
 
+{{/* A commit subject that links to the hosting site. Takes the same dict as
+     "commit"; the full hash stays available as the title either way. */}}
+{{define "commit-subject" -}}
+{{- if .URL -}}
+<a class="commit" href="{{.URL}}{{.Commit.Hash}}" rel="noopener noreferrer" title="{{.Commit.Hash}}">{{.Commit.Subject}}</a>
+{{- else -}}
+<span title="{{.Commit.Hash}}">{{.Commit.Subject}}</span>
+{{- end -}}
+{{end}}
+
 {{/* The footer shown under a page and under its history. Takes a dict of
      "Path" (the repository path), "Commit" (the most recent commit),
      "HasHistory" (whether that commit exists) and "CommitURL". */}}

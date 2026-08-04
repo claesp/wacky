@@ -9,18 +9,22 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Commit</th><th>When</th><th>Author</th><th>Subject</th></tr>
+        <tr><th>When</th><th>Author</th><th>Subject</th></tr>
       </thead>
       <tbody>
         {{- range .Commits}}
         <tr>
-          <td>{{template "commit" dict "URL" $.CommitURL "Commit" .}}</td>
           <td>{{formatTime .When}}</td>
           <td>{{.Author}}</td>
-          <td>{{.Subject}}</td>
+          <td>{{template "commit-subject" dict "URL" $.CommitURL "Commit" .}}</td>
         </tr>
         {{- end}}
       </tbody>
+      {{- if .Truncated}}
+      <tfoot>
+        <tr><td class="muted" colspan="3">Only showing the latest {{.Limit}} commits</td></tr>
+      </tfoot>
+      {{- end}}
     </table>
   </div>
   {{else}}
