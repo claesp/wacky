@@ -1,4 +1,5 @@
 # Compiled binaries
+cmd/wiki/wiki
 /wiki
 /wacky
 *.exe

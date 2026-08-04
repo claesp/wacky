@@ -23,11 +23,13 @@ type layout struct {
 	Nav       []*wiki.Node
 	Stats     wiki.Stats
 	Now       time.Time
+	// Path is the request path, used to mark the current navigation entry.
+	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
 	Assets string
 }
 
-func (s *Server) layout(title, slug string) layout {
+func (s *Server) layout(r *http.Request, title, slug string) layout {
 	return layout{
 		Site:      s.cfg.Title,
 		PageTitle: title,
@@ -36,6 +38,7 @@ func (s *Server) layout(title, slug string) layout {
 		Nav:       s.store.Tree().Children,
 		Stats:     s.store.Stats(),
 		Now:       time.Now(),
+		Path:      r.URL.Path,
 		Assets:    s.assets,
 	}
 }
@@ -152,7 +155,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wiki.P
 	}
 
 	view := pageView{
-		layout:      s.layout(doc.Title, page.Slug),
+		layout:      s.layout(r, doc.Title, page.Slug),
 		Page:        page,
 		Doc:         doc,
 		Breadcrumbs: s.store.Breadcrumbs(page.Slug),
@@ -170,7 +173,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wiki.P
 
 func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, children []*wiki.Node) {
 	s.write(w, r, http.StatusOK, "dir.gohtml", dirView{
-		layout:      s.layout(path.Base(slug), slug),
+		layout:      s.layout(r, path.Base(slug), slug),
 		Dir:         slug,
 		Children:    children,
 		Breadcrumbs: s.store.Breadcrumbs(slug),
@@ -180,7 +183,7 @@ func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, 
 // handleIndex lists every page in the wiki.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.write(w, r, http.StatusOK, "index.gohtml", indexView{
-		layout: s.layout("All pages", ""),
+		layout: s.layout(r, "All pages", ""),
 		Pages:  s.store.Pages(),
 	})
 }
@@ -191,7 +194,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	results := s.store.Search(query, 50)
 
 	view := searchView{
-		layout:  s.layout("Search", ""),
+		layout:  s.layout(r, "Search", ""),
 		Results: results,
 		Total:   len(results),
 	}
@@ -226,7 +229,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.write(w, r, http.StatusOK, "history.gohtml", historyView{
-		layout:      s.layout("History of "+path.Base(repoPath), slug),
+		layout:      s.layout(r, "History of "+path.Base(repoPath), slug),
 		Path:        repoPath,
 		Page:        page,
 		Commits:     commits,
@@ -298,7 +301,7 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, status int, name 
 
 func (s *Server) renderError(w http.ResponseWriter, r *http.Request, status int, message string) {
 	view := errorView{
-		layout:  s.layout(http.StatusText(status), ""),
+		layout:  s.layout(r, http.StatusText(status), ""),
 		Status:  status,
 		Message: message,
 	}

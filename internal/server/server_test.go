@@ -216,6 +216,60 @@ func TestConditionalGet(t *testing.T) {
 	}
 }
 
+// The sidebar carries a Home link, and the menu that reveals it on a phone is
+// a checkbox: the Content-Security-Policy forbids JavaScript, so the toggle
+// has to work in CSS alone.
+func TestSidebarNavigation(t *testing.T) {
+	srv := newTestServer(t)
+
+	body := get(t, srv, "/wiki/docs/setup").Body.String()
+	for _, want := range []string{
+		`<li><a href="/">Home</a></li>`,
+		`<li><a href="/pages">All pages</a></li>`,
+		`<input class="menu-toggle visually-hidden" type="checkbox" id="menu-toggle">`,
+		`<label class="menu-button" for="menu-toggle">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page is missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<script") {
+		t.Error("the menu introduced a script tag, which the CSP forbids")
+	}
+
+	// The toggle must precede the header and the shell, or the sibling
+	// combinator that opens the sidebar cannot reach them.
+	toggle := strings.Index(body, `id="menu-toggle"`)
+	header := strings.Index(body, `<header class="topbar">`)
+	shell := strings.Index(body, `<div class="shell">`)
+	if !(toggle < header && header < shell) {
+		t.Errorf("markup order is toggle=%d header=%d shell=%d, want toggle first", toggle, header, shell)
+	}
+}
+
+// The current entry is marked for assistive technology, not just visually.
+func TestNavigationMarksCurrentPage(t *testing.T) {
+	tests := []struct {
+		target, current string
+	}{
+		{"/", `<a href="/" class="active" aria-current="page">Home</a>`},
+		{"/pages", `<a href="/pages" class="active" aria-current="page">All pages</a>`},
+	}
+	srv := newTestServer(t)
+	for _, tt := range tests {
+		body := get(t, srv, tt.target).Body.String()
+		if !strings.Contains(body, tt.current) {
+			t.Errorf("GET %s did not mark its own entry as current", tt.target)
+		}
+	}
+
+	// A wiki page must not mark Home as current.
+	body := get(t, srv, "/wiki/docs/setup").Body.String()
+	if strings.Contains(body, `<a href="/" class="active"`) {
+		t.Error("Home is marked current while a wiki page is shown")
+	}
+}
+
 // A stylesheet fix must reach a browser that already cached the old one, so
 // the link carries a content version and only versioned URLs cache forever.
 func TestStylesheetIsVersioned(t *testing.T) {

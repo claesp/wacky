@@ -1,11 +1,12 @@
 {{define "nav" -}}
-{{- if .Nav -}}
 <ul class="nav">
+  <li><a href="/"{{if eq .Path "/"}} class="active" aria-current="page"{{end}}>Home</a></li>
+  <li><a href="/pages"{{if eq .Path "/pages"}} class="active" aria-current="page"{{end}}>All pages</a></li>
   {{- range .Nav}}
   {{template "nav-node" dict "Node" . "Current" $.Slug}}
   {{- end}}
 </ul>
-{{- else -}}
+{{- if not .Nav}}
 <p class="muted">This repository contains no Markdown files.</p>
 {{- end -}}
 {{- end}}

@@ -97,6 +97,33 @@ a:hover { text-decoration: underline; }
   color: var(--fg);
 }
 
+/* Menu button. The checkbox it drives is visually hidden but still focusable,
+   so the control is reachable by keyboard; the label is what gets painted. */
+.menu-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-right: -0.25rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--fg);
+  cursor: pointer;
+}
+.menu-button svg { fill: currentColor; display: block; }
+.menu-button:hover { border-color: var(--border); color: var(--accent); }
+
+.menu-toggle:focus-visible ~ .topbar .menu-button {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.menu-toggle:checked ~ .topbar .menu-button {
+  background: var(--accent-soft);
+  border-color: var(--border);
+  color: var(--accent);
+}
+
 .search {
   display: flex;
   gap: 0.4rem;
@@ -150,13 +177,28 @@ a:hover { text-decoration: underline; }
 
 @media (max-width: 850px) {
   .shell { grid-template-columns: 1fr; gap: 1rem; }
-  .sidebar { order: 2; border-top: 1px solid var(--border); padding-top: 1rem; }
 
-  /* The header wraps to three rows at this width, which would eat a fifth of
-     a phone screen and leave no offset that suits every layout. Letting it
-     scroll away instead keeps in-page links landing on their heading. */
+  /* The header wraps to more than one row at this width, which would eat a
+     fifth of a phone screen and leave no offset that suits every layout.
+     Letting it scroll away keeps in-page links landing on their heading. */
   :root { --topbar-height: 0rem; }
   .topbar { position: static; }
+
+  .menu-button { display: inline-flex; }
+  .search input { min-width: 0; flex: 1; }
+  .search { width: 100%; margin-left: 0; }
+  /* Its only link lives in the menu here, so the row would be a duplicate. */
+  .topnav { display: none; }
+
+  /* The navigation is behind the menu button here. It opens above the
+     content, not below it, so tapping the button shows an immediate result. */
+  .sidebar {
+    display: none;
+    order: -1;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+  }
+  .menu-toggle:checked ~ .shell .sidebar { display: block; }
 }
 
 .sidebar { font-size: 0.92rem; }
