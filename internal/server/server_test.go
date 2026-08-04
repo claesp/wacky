@@ -236,6 +236,13 @@ func TestSidebarNavigation(t *testing.T) {
 		}
 	}
 
+	// The page list is reached from the sidebar only; the header carries the
+	// brand and the search form.
+	headerHTML := body[strings.Index(body, "<header"):strings.Index(body, "</header>")]
+	if strings.Contains(headerHTML, "/pages") {
+		t.Errorf("header still links to the page list:\n%s", headerHTML)
+	}
+
 	// Home first, then the repository tree, then the page list.
 	home := strings.Index(body, `class="nav-top"`)
 	tree := strings.Index(body, `<span class="nav-dir">Docs</span>`)

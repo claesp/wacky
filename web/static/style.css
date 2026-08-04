@@ -153,8 +153,6 @@ a:hover { text-decoration: underline; }
 }
 .search button:hover { border-color: var(--accent); color: var(--accent); }
 
-.topnav { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; }
-
 .ref {
   font-family: var(--mono);
   font-size: 0.8rem;
@@ -187,8 +185,6 @@ a:hover { text-decoration: underline; }
   .menu-button { display: inline-flex; }
   .search input { min-width: 0; flex: 1; }
   .search { width: 100%; margin-left: 0; }
-  /* Its only link lives in the menu here, so the row would be a duplicate. */
-  .topnav { display: none; }
 
   /* The navigation is behind the menu button here. It opens above the
      content, not below it, so tapping the button shows an immediate result. */
