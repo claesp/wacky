@@ -127,7 +127,6 @@ a:hover { text-decoration: underline; }
 
 .search {
   display: flex;
-  gap: 0.4rem;
   margin-left: auto;
 }
 
@@ -141,18 +140,8 @@ a:hover { text-decoration: underline; }
   font: inherit;
   font-size: 0.9rem;
 }
-
-.search button {
-  padding: 0.35rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--fg);
-  font: inherit;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-.search button:hover { border-color: var(--accent); color: var(--accent); }
+.search input:hover { border-color: var(--fg-muted); }
+.search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .ref {
   font-family: var(--mono);
@@ -197,11 +186,10 @@ a:hover { text-decoration: underline; }
   }
   .ref { max-width: 5rem; }
   /* The search absorbs the shrinking first (hence the large shrink factor),
-     down to a floor that keeps the fixed-width button on screen. Only then
-     does the brand start to ellipsise. */
-  .search { flex: 1 100 auto; min-width: 9.5rem; }
+     down to a floor that keeps the field usable. Only then does the brand
+     start to ellipsise. */
+  .search { flex: 1 100 auto; min-width: 6rem; }
   .search input { flex: 1; min-width: 0; }
-  .search button { flex: none; }
 
   /* The navigation is behind the menu button here. It opens above the
      content, not below it, so tapping the button shows an immediate result. */

@@ -243,6 +243,15 @@ func TestSidebarNavigation(t *testing.T) {
 		t.Errorf("header still links to the page list:\n%s", headerHTML)
 	}
 
+	// The search form has no submit button, so it relies on implicit
+	// submission: that only works while it holds exactly one field.
+	if strings.Contains(headerHTML, "<button") {
+		t.Errorf("header regained a button:\n%s", headerHTML)
+	}
+	if n := strings.Count(headerHTML, "<input"); n != 1 {
+		t.Errorf("search form has %d inputs, want exactly 1 so Enter submits it:\n%s", n, headerHTML)
+	}
+
 	// Home first, then the repository tree, then the page list.
 	home := strings.Index(body, `class="nav-top"`)
 	tree := strings.Index(body, `<span class="nav-dir">Docs</span>`)

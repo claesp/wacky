@@ -27,10 +27,11 @@
   </label>
   <a class="brand" href="/">{{.Site}}</a>
   {{if .Ref}}<span class="ref" title="Serving a pinned revision">{{.Ref}}</span>{{end}}
+  {{/* No submit button: the form has a single field, so pressing Enter (or a
+       phone keyboard's Search key) submits it. */}}
   <form class="search" action="/search" method="get" role="search">
     <label class="visually-hidden" for="q">Search the wiki</label>
     <input id="q" name="q" type="search" placeholder="Search&hellip;" value="{{.Query}}">
-    <button type="submit">Search</button>
   </form>
 </header>
 
