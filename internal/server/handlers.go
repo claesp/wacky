@@ -11,7 +11,7 @@ import (
 
 	"github.com/claesp/wacky/internal/git"
 	"github.com/claesp/wacky/internal/markdown"
-	"github.com/claesp/wacky/internal/wiki"
+	"github.com/claesp/wacky/internal/wacky"
 )
 
 // layout carries the data every template needs.
@@ -21,9 +21,8 @@ type layout struct {
 	Slug      string
 	Query     string
 	Ref       string
-	Nav       []*wiki.Node
-	Stats     wiki.Stats
-	Now       time.Time
+	Nav       []*wacky.Node
+	Stats     wacky.Stats
 	// Path is the request path, used to mark the current navigation entry.
 	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
@@ -38,7 +37,6 @@ func (s *Server) layout(r *http.Request, title, slug string) layout {
 		Ref:       s.cfg.Ref,
 		Nav:       s.store.Tree().Children,
 		Stats:     s.store.Stats(),
-		Now:       time.Now(),
 		Path:      r.URL.Path,
 		Assets:    s.assets,
 	}
@@ -47,9 +45,9 @@ func (s *Server) layout(r *http.Request, title, slug string) layout {
 // pageView renders a single wiki page.
 type pageView struct {
 	layout
-	Page        *wiki.Page
+	Page        *wacky.Page
 	Doc         markdown.Document
-	Breadcrumbs []wiki.Breadcrumb
+	Breadcrumbs []wacky.Breadcrumb
 	LastCommit  git.Commit
 	HasHistory  bool
 }
@@ -58,21 +56,21 @@ type pageView struct {
 type dirView struct {
 	layout
 	Dir         string
-	Children    []*wiki.Node
-	Breadcrumbs []wiki.Breadcrumb
+	Children    []*wacky.Node
+	Breadcrumbs []wacky.Breadcrumb
 }
 
 type indexView struct {
 	layout
-	Pages       []*wiki.Page
-	Breadcrumbs []wiki.Breadcrumb
+	Pages       []*wacky.Page
+	Breadcrumbs []wacky.Breadcrumb
 }
 
 type searchView struct {
 	layout
-	Results     []wiki.Result
+	Results     []wacky.Result
 	Total       int
-	Breadcrumbs []wiki.Breadcrumb
+	Breadcrumbs []wacky.Breadcrumb
 }
 
 type historyView struct {
@@ -83,9 +81,9 @@ type historyView struct {
 	// Heading is the title of the page the history belongs to, or the file
 	// name for a file that is not a page.
 	Heading     string
-	Page        *wiki.Page
+	Page        *wacky.Page
 	Commits     []git.Commit
-	Breadcrumbs []wiki.Breadcrumb
+	Breadcrumbs []wacky.Breadcrumb
 	// LastCommit is Commits[0], carried separately so the footer partial can
 	// be shared with the page view.
 	LastCommit git.Commit
@@ -122,7 +120,7 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	// Send every alias of a page (trailing slash, doubled separators, "./")
 	// to its single canonical URL.
 	if slug != raw {
-		http.Redirect(w, r, "/wiki/"+slug, http.StatusMovedPermanently)
+		http.Redirect(w, r, "/wacky/"+slug, http.StatusMovedPermanently)
 		return
 	}
 
@@ -130,8 +128,8 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 		s.renderPage(w, r, page)
 		return
 	}
-	// "/wiki/notes/setup.md" is a valid way to spell "/wiki/notes/setup".
-	if wiki.IsMarkdown(slug) {
+	// "/wacky/notes/setup.md" is a valid way to spell "/wacky/notes/setup".
+	if wacky.IsMarkdown(slug) {
 		if page, ok := s.store.PageByPath(slug); ok {
 			http.Redirect(w, r, page.URL(), http.StatusMovedPermanently)
 			return
@@ -148,7 +146,7 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	s.renderError(w, r, http.StatusNotFound, "There is no page at "+slug+".")
 }
 
-func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wiki.Page) {
+func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wacky.Page) {
 	etag := s.store.ETag(page)
 	if etag != "" {
 		w.Header().Set("ETag", etag)
@@ -183,7 +181,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wiki.P
 	s.write(w, r, http.StatusOK, "page.gohtml", view)
 }
 
-func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, children []*wiki.Node) {
+func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, children []*wacky.Node) {
 	s.write(w, r, http.StatusOK, "dir.gohtml", dirView{
 		layout:      s.layout(r, path.Base(slug), slug),
 		Dir:         slug,
@@ -198,7 +196,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.write(w, r, http.StatusOK, "index.gohtml", indexView{
 		layout:      s.layout(r, "All pages", ""),
 		Pages:       s.store.Pages(),
-		Breadcrumbs: []wiki.Breadcrumb{{Name: "All pages", URL: "/pages"}},
+		Breadcrumbs: []wacky.Breadcrumb{{Name: "All pages", URL: "/pages"}},
 	})
 }
 
@@ -209,7 +207,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// The crumb carries the query, so following it repeats the search rather
 	// than landing on an empty form.
-	crumb := wiki.Breadcrumb{Name: "Search", URL: "/search"}
+	crumb := wacky.Breadcrumb{Name: "Search", URL: "/search"}
 	if query != "" {
 		crumb.URL += "?q=" + url.QueryEscape(query)
 	}
@@ -218,7 +216,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		layout:      s.layout(r, "Search", ""),
 		Results:     results,
 		Total:       len(results),
-		Breadcrumbs: []wiki.Breadcrumb{crumb},
+		Breadcrumbs: []wacky.Breadcrumb{crumb},
 	}
 	view.Query = query
 	s.write(w, r, http.StatusOK, "search.gohtml", view)

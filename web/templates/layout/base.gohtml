@@ -47,12 +47,7 @@
 </div>
 
 <footer class="footer">
-  <span>{{.Stats.Pages}} pages</span>
-  <span>&middot;</span>
-  <span title="{{.Stats.Root}}">{{.Stats.Head.Subject}}</span>
-  {{with .Stats.Head.Short}}<span>&middot;</span><code>{{.}}</code>{{end}}
-  <span>&middot;</span>
-  <span>indexed {{formatTime .Stats.LoadedAt}}</span>
+  <span title="{{formatTime .Stats.LoadedAt}}">indexed {{relativeTime .Stats.LoadedAt}}</span>
 </footer>
 </body>
 </html>

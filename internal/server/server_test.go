@@ -17,10 +17,10 @@ import (
 	"github.com/claesp/wacky/internal/config"
 	"github.com/claesp/wacky/internal/git"
 	"github.com/claesp/wacky/internal/markdown"
-	"github.com/claesp/wacky/internal/wiki"
+	"github.com/claesp/wacky/internal/wacky"
 )
 
-// fakeSource satisfies wiki.Source without touching a real repository.
+// fakeSource satisfies wacky.Source without touching a real repository.
 type fakeSource struct{ files map[string]string }
 
 func (f *fakeSource) Root() string { return "/fake/repo" }
@@ -75,7 +75,7 @@ func newTestServer(t *testing.T) *Server {
 	}}
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	store := wiki.NewStore(src, markdown.New(), log)
+	store := wacky.NewStore(src, markdown.New(), log)
 	if err := store.Reload(context.Background()); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
@@ -111,15 +111,15 @@ func TestRoutes(t *testing.T) {
 		wantStatus int
 		wantBody   []string
 	}{
-		{"home", "/", http.StatusOK, []string{"Handbook", `href="/wiki/docs/setup"`}},
-		{"page", "/wiki/docs/setup", http.StatusOK, []string{"<h1 id=\"setup\">Setup", "Run the installer"}},
-		{"nested page", "/wiki/guides/deep/adv", http.StatusOK, []string{"Advanced"}},
+		{"home", "/", http.StatusOK, []string{"Handbook", `href="/wacky/docs/setup"`}},
+		{"page", "/wacky/docs/setup", http.StatusOK, []string{"<h1 id=\"setup\">Setup", "Run the installer"}},
+		{"nested page", "/wacky/guides/deep/adv", http.StatusOK, []string{"Advanced"}},
 		{"page list", "/pages", http.StatusOK, []string{"All pages", "docs/setup.md"}},
 		{"search hit", "/search?q=installer", http.StatusOK, []string{"<mark>installer</mark>", "Setup"}},
 		{"search miss", "/search?q=zzzznothing", http.StatusOK, []string{"Nothing matched"}},
 		{"history", "/history/docs/setup", http.StatusOK, []string{"write the docs", "Ada"}},
-		{"directory listing", "/wiki/guides", http.StatusOK, []string{"no index page", "Advanced"}},
-		{"missing page", "/wiki/nope", http.StatusNotFound, []string{"There is no page at nope"}},
+		{"directory listing", "/wacky/guides", http.StatusOK, []string{"no index page", "Advanced"}},
+		{"missing page", "/wacky/nope", http.StatusNotFound, []string{"There is no page at nope"}},
 		{"unknown route", "/nothing/here", http.StatusNotFound, []string{"404"}},
 		{"stylesheet", "/static/style.css", http.StatusOK, []string{"--accent"}},
 	}
@@ -144,9 +144,9 @@ func TestPageRedirects(t *testing.T) {
 	srv := newTestServer(t)
 
 	tests := []struct{ target, location string }{
-		{"/wiki/docs/setup/", "/wiki/docs/setup"},
-		{"/wiki/docs/setup.md", "/wiki/docs/setup"},
-		{"/wiki/docs/diagram.png", "/raw/docs/diagram.png"},
+		{"/wacky/docs/setup/", "/wacky/docs/setup"},
+		{"/wacky/docs/setup.md", "/wacky/docs/setup"},
+		{"/wacky/docs/diagram.png", "/raw/docs/diagram.png"},
 	}
 	for _, tt := range tests {
 		rec := get(t, srv, tt.target)
@@ -197,13 +197,13 @@ func TestRawServing(t *testing.T) {
 func TestConditionalGet(t *testing.T) {
 	srv := newTestServer(t)
 
-	first := get(t, srv, "/wiki/docs/setup")
+	first := get(t, srv, "/wacky/docs/setup")
 	etag := first.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("no ETag on a page response")
 	}
 
-	second := get(t, srv, "/wiki/docs/setup", [2]string{"If-None-Match", etag})
+	second := get(t, srv, "/wacky/docs/setup", [2]string{"If-None-Match", etag})
 	if second.Code != http.StatusNotModified {
 		t.Errorf("conditional GET = %d, want 304", second.Code)
 	}
@@ -212,7 +212,7 @@ func TestConditionalGet(t *testing.T) {
 	}
 
 	// Same request, same answer.
-	third := get(t, srv, "/wiki/docs/setup")
+	third := get(t, srv, "/wacky/docs/setup")
 	if third.Body.String() != first.Body.String() {
 		t.Error("repeating a GET produced a different page")
 	}
@@ -224,7 +224,7 @@ func TestConditionalGet(t *testing.T) {
 func TestSidebarNavigation(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := get(t, srv, "/wiki/docs/setup").Body.String()
+	body := get(t, srv, "/wacky/docs/setup").Body.String()
 	for _, want := range []string{
 		`<li class="nav-top"><a href="/">Home</a></li>`,
 		`<li class="nav-bottom"><a href="/pages">All pages</a></li>`,
@@ -290,7 +290,7 @@ func TestNavigationMarksCurrentPage(t *testing.T) {
 	}
 
 	// A wiki page must not mark Home as current.
-	body := get(t, srv, "/wiki/docs/setup").Body.String()
+	body := get(t, srv, "/wacky/docs/setup").Body.String()
 	if strings.Contains(body, `<a href="/" class="active"`) {
 		t.Error("Home is marked current while a wiki page is shown")
 	}
@@ -333,22 +333,22 @@ func TestBreadcrumbsOnEveryPage(t *testing.T) {
 		},
 		{
 			name:   "wiki page marks its last crumb",
-			target: "/wiki/docs/setup",
+			target: "/wacky/docs/setup",
 			want: []string{
 				`<a href="/">Home</a>`,
-				`<a href="/wiki/docs">Docs</a>`,
-				`<a href="/wiki/docs/setup" aria-current="page">Setup</a>`,
+				`<a href="/wacky/docs">Docs</a>`,
+				`<a href="/wacky/docs/setup" aria-current="page">Setup</a>`,
 			},
 		},
 		{
 			name:   "directory listing",
-			target: "/wiki/guides",
-			want:   []string{`<a href="/">Home</a>`, `<a href="/wiki/guides" aria-current="page">`},
+			target: "/wacky/guides",
+			want:   []string{`<a href="/">Home</a>`, `<a href="/wacky/guides" aria-current="page">`},
 		},
 		{
 			name:   "history is not one of its own crumbs",
 			target: "/history/docs/setup",
-			want:   []string{`<a href="/">Home</a>`, `<a href="/wiki/docs/setup">Setup</a>`},
+			want:   []string{`<a href="/">Home</a>`, `<a href="/wacky/docs/setup">Setup</a>`},
 		},
 	}
 
@@ -434,7 +434,7 @@ func crumbHref(t *testing.T, body, name string) string {
 func TestHistoryFooterMatchesAPage(t *testing.T) {
 	srv := newTestServer(t)
 
-	pageFooter := footer(t, get(t, srv, "/wiki/docs/setup").Body.String())
+	pageFooter := footer(t, get(t, srv, "/wacky/docs/setup").Body.String())
 	histFooter := footer(t, get(t, srv, "/history/docs/setup.md").Body.String())
 
 	if pageFooter != histFooter {
@@ -483,7 +483,7 @@ func TestHistoryLinksNameTheSourceFile(t *testing.T) {
 
 	tests := []struct{ page, wantLink string }{
 		{"/", `<a href="/history/README.md">History</a>`},
-		{"/wiki/docs/setup", `<a href="/history/docs/setup.md">History</a>`},
+		{"/wacky/docs/setup", `<a href="/history/docs/setup.md">History</a>`},
 	}
 	for _, tt := range tests {
 		body := get(t, srv, tt.page).Body.String()
@@ -614,12 +614,12 @@ func TestWriteMethodsAreRejected(t *testing.T) {
 	srv := newTestServer(t)
 
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		req := httptest.NewRequest(method, "/wiki/docs/setup", nil)
+		req := httptest.NewRequest(method, "/wacky/docs/setup", nil)
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("%s /wiki/docs/setup = %d, want 405", method, rec.Code)
+			t.Errorf("%s /wacky/docs/setup = %d, want 405", method, rec.Code)
 		}
 	}
 }

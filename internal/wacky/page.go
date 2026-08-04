@@ -1,6 +1,6 @@
-// Package wiki turns the Markdown files of a Git repository into an
+// Package wacky turns the Markdown files of a Git repository into an
 // addressable set of pages.
-package wiki
+package wacky
 
 import (
 	"path"
@@ -52,7 +52,7 @@ func (p *Page) URL() string {
 	if p.Slug == "" {
 		return "/"
 	}
-	return "/wiki/" + p.Slug
+	return "/wacky/" + p.Slug
 }
 
 // IsMarkdown reports whether a repository path is a wiki page.

@@ -1,4 +1,4 @@
-package wiki
+package wacky
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 )
 
 // ErrNotFound reports a slug or path that is not part of the wiki.
-var ErrNotFound = errors.New("wiki: page not found")
+var ErrNotFound = errors.New("wacky: page not found")
 
 // Source is the read-only view of a repository that a Store needs. It is
 // declared here, in the consumer, so the Store can be tested with a fake.

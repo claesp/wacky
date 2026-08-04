@@ -36,7 +36,7 @@ Underscores inside a word stay literal, so `snake_case_identifiers` survive.
 
 Relative links are rewritten to the URL the server actually serves:
 
-- `[setup](docs/setup.md)` → `/wiki/docs/setup`
+- `[setup](docs/setup.md)` → `/wacky/docs/setup`
 - `[home](../README.md)` → `/`
 - `![diagram](diagram.png)` → `/raw/docs/diagram.png`
 - `[[Glossary]]` → the page whose title, slug or file name matches

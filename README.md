@@ -55,7 +55,7 @@ serves `docs/` as the site root, and the rest of the repository stays invisible.
 | Route | Purpose |
 |-------|---------|
 | `/` | The repository's `README.md`, `index.md` or `Home.md` |
-| `/wiki/{path}` | A page, or a listing for a directory without an index |
+| `/wacky/{path}` | A page, or a listing for a directory without an index |
 | `/raw/{path}` | The bytes of any file: sources, images, attachments |
 | `/history/{path}` | The commits that touched a file |
 | `/pages` | Every page in the wiki |
@@ -72,7 +72,7 @@ serves `docs/` as the site root, and the rest of the repository stays invisible.
 │   ├── config/          # flag + environment parsing and validation
 │   ├── git/             # read-only repository access via the git binary
 │   ├── markdown/        # dependency-free Markdown → HTML renderer
-│   ├── wiki/            # domain: pages, slugs, navigation tree, search
+│   ├── wacky/           # domain: pages, slugs, navigation tree, search
 │   └── server/          # routing, handlers, middleware, template set
 ├── docs/                # this project's documentation (and demo content)
 └── web/
@@ -82,7 +82,7 @@ serves `docs/` as the site root, and the rest of the repository stays invisible.
 
 `internal/` keeps the packages unimportable from outside the module, so the
 package boundaries stay free to change. Dependencies point one way:
-`server → wiki → {markdown, git} → config`.
+`server → wacky → {markdown, git} → config`.
 
 ## Design notes
 

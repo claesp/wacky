@@ -207,10 +207,10 @@ func TestTableOfContentsIsUnique(t *testing.T) {
 
 func TestResolveLinkAndWiki(t *testing.T) {
 	opts := Options{
-		ResolveLink: func(dest string) string { return "/wiki/" + strings.TrimSuffix(dest, ".md") },
+		ResolveLink: func(dest string) string { return "/wacky/" + strings.TrimSuffix(dest, ".md") },
 		ResolveWiki: func(target string) (string, bool) {
 			if target == "Known" {
-				return "/wiki/known", true
+				return "/wacky/known", true
 			}
 			return "/search?q=" + target, false
 		},
@@ -218,8 +218,8 @@ func TestResolveLinkAndWiki(t *testing.T) {
 
 	got := string(render(t, "[see](other.md) [[Known]] [[Missing|label]]", opts).HTML)
 	for _, want := range []string{
-		`<a href="/wiki/other"`,
-		`class="wikilink" href="/wiki/known"`,
+		`<a href="/wacky/other"`,
+		`class="wikilink" href="/wacky/known"`,
 		`class="wikilink missing" href="/search?q=Missing"`,
 		`>label</a>`,
 	} {

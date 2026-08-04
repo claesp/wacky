@@ -22,7 +22,7 @@ import (
 	"github.com/claesp/wacky/internal/git"
 	"github.com/claesp/wacky/internal/markdown"
 	"github.com/claesp/wacky/internal/server"
-	"github.com/claesp/wacky/internal/wiki"
+	"github.com/claesp/wacky/internal/wacky"
 )
 
 func main() {
@@ -57,7 +57,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 
-	store := wiki.NewStore(repo, markdown.New(), log)
+	store := wacky.NewStore(repo, markdown.New(), log)
 	if err := store.Reload(ctx); err != nil {
 		return fmt.Errorf("build page index: %w", err)
 	}

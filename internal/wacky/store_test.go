@@ -1,4 +1,4 @@
-package wiki
+package wacky
 
 import (
 	"context"
@@ -177,10 +177,10 @@ func TestRenderResolvesLinks(t *testing.T) {
 	}
 	html := string(doc.HTML)
 
-	if !strings.Contains(html, `href="/wiki/docs/setup"`) {
+	if !strings.Contains(html, `href="/wacky/docs/setup"`) {
 		t.Errorf("relative Markdown link was not rewritten: %s", html)
 	}
-	if !strings.Contains(html, `class="wikilink" href="/wiki/docs/glossary"`) {
+	if !strings.Contains(html, `class="wikilink" href="/wacky/docs/glossary"`) {
 		t.Errorf("wiki link did not resolve by title: %s", html)
 	}
 
@@ -259,9 +259,9 @@ func TestTreeAndBreadcrumbs(t *testing.T) {
 
 	trail := store.Breadcrumbs("notes/2026/q1")
 	want := []Breadcrumb{
-		{Name: "Notes", URL: "/wiki/notes"},
-		{Name: "2026", URL: "/wiki/notes/2026"},
-		{Name: "Q1 Notes", URL: "/wiki/notes/2026/q1"},
+		{Name: "Notes", URL: "/wacky/notes"},
+		{Name: "2026", URL: "/wacky/notes/2026"},
+		{Name: "Q1 Notes", URL: "/wacky/notes/2026/q1"},
 	}
 	if !reflect.DeepEqual(trail, want) {
 		t.Errorf("Breadcrumbs = %+v, want %+v", trail, want)

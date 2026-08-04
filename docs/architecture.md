@@ -4,7 +4,7 @@ title: Architecture
 
 # Architecture
 
-The wiki is five small packages with one-way dependencies and no shared mutable
+wacky is five small packages with one-way dependencies and no shared mutable
 state beyond a single, atomically swapped index.
 
 ## Request flow
@@ -14,7 +14,7 @@ state beyond a single, atomically swapped index.
 2. `internal/server` routes the request, renders a template into a buffer and
    writes it. Middleware adds panic recovery, request logging and security
    headers.
-3. `internal/wiki` answers from the current snapshot: a page lookup, a search, a
+3. `internal/wacky` answers from the current snapshot: a page lookup, a search, a
    directory listing, or a memoised render.
 4. `internal/markdown` converts the file to HTML, rewriting links through a
    resolver the store supplies.
@@ -23,7 +23,7 @@ state beyond a single, atomically swapped index.
 
 ## The snapshot
 
-`wiki.Store` holds a pointer to an immutable `snapshot`: the page map, the slug
+`wacky.Store` holds a pointer to an immutable `snapshot`: the page map, the slug
 and title indexes, the file list, the raw sources, the navigation tree and a
 render cache.
 
@@ -41,7 +41,7 @@ that no longer make sense.
 
 ## Where the interfaces live
 
-`wiki.Source` is declared in `internal/wiki`, the package that consumes it, not
+`wacky.Source` is declared in `internal/wacky`, the package that consumes it, not
 in `internal/git`, the package that implements it. The store can therefore be
 tested against an in-memory map with no repository, no subprocesses and no
 temporary directories, which is what `store_test.go` does.

@@ -1,4 +1,4 @@
-package wiki
+package wacky
 
 import (
 	"path"
@@ -26,7 +26,7 @@ func (n *Node) URL() string {
 	if n.Slug == "" {
 		return "/"
 	}
-	return "/wiki/" + n.Slug
+	return "/wacky/" + n.Slug
 }
 
 // Find returns the node at slug, or nil. The empty slug returns the root.
@@ -139,7 +139,7 @@ func (s *Store) Breadcrumbs(slug string) []Breadcrumb {
 		if node := tree.Find(partial); node != nil && node.Name != "" {
 			name = node.Name
 		}
-		trail = append(trail, Breadcrumb{Name: name, URL: "/wiki/" + partial})
+		trail = append(trail, Breadcrumb{Name: name, URL: "/wacky/" + partial})
 	}
 	return trail
 }

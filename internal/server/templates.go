@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -75,11 +76,52 @@ var funcs = template.FuncMap{
 		}
 		return t.Format("2006-01-02")
 	},
-	"humanSize": humanSize,
-	"pathExt":   path.Ext,
-	"lower":     strings.ToLower,
-	"dict":      dict,
-	"urlPath":   urlPath,
+	"humanSize":    humanSize,
+	"relativeTime": relativeTime,
+	"pathExt":      path.Ext,
+	"lower":        strings.ToLower,
+	"dict":         dict,
+	"urlPath":      urlPath,
+}
+
+// relativeTime renders a timestamp as its age, e.g. "3 days ago".
+func relativeTime(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	return humanizeAge(time.Since(t))
+}
+
+// humanizeAge turns a duration into a coarse, readable age. It is kept apart
+// from the clock so that it can be tested directly.
+func humanizeAge(d time.Duration) string {
+	const day = 24 * time.Hour
+
+	// A clock that moved backwards must not produce a negative age.
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return ago(int(d.Seconds()), "second")
+	case d < time.Hour:
+		return ago(int(d.Minutes()), "minute")
+	case d < day:
+		return ago(int(d.Hours()), "hour")
+	case d < 30*day:
+		return ago(int(d/day), "day")
+	case d < 365*day:
+		return ago(int(d/(30*day)), "month")
+	default:
+		return ago(int(d/(365*day)), "year")
+	}
+}
+
+func ago(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit + " ago"
+	}
+	return strconv.Itoa(n) + " " + unit + "s ago"
 }
 
 // urlPath drops the query string, so a link that carries one can still be

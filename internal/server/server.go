@@ -19,14 +19,14 @@ import (
 	"time"
 
 	"github.com/claesp/wacky/internal/config"
-	"github.com/claesp/wacky/internal/wiki"
+	"github.com/claesp/wacky/internal/wacky"
 	"github.com/claesp/wacky/web"
 )
 
 // Server wires the page store to an HTTP handler.
 type Server struct {
 	cfg   config.Config
-	store *wiki.Store
+	store *wacky.Store
 	log   *slog.Logger
 	tmpl  *templates
 	mux   http.Handler
@@ -37,7 +37,7 @@ type Server struct {
 
 // New builds a Server. Templates are parsed once, up front, so a broken
 // template fails at start-up rather than on a request.
-func New(cfg config.Config, store *wiki.Store, log *slog.Logger) (*Server, error) {
+func New(cfg config.Config, store *wacky.Store, log *slog.Logger) (*Server, error) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -94,7 +94,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes(static fs.FS) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleHome)
-	mux.HandleFunc("GET /wiki/{path...}", s.handlePage)
+	mux.HandleFunc("GET /wacky/{path...}", s.handlePage)
 	mux.HandleFunc("GET /raw/{path...}", s.handleRaw)
 	mux.HandleFunc("GET /history/{path...}", s.handleHistory)
 	mux.HandleFunc("GET /pages", s.handleIndex)
@@ -138,7 +138,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go func() { serveErr <- httpSrv.Serve(listener) }()
 
 	stats := s.store.Stats()
-	s.log.Info("wiki listening",
+	s.log.Info("wacky listening",
 		"addr", listener.Addr().String(),
 		"repo", stats.Root,
 		"ref", refOrWorkingTree(stats.Ref),
