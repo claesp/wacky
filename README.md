@@ -11,26 +11,26 @@ the whole site is served without a single line of JavaScript.
 ## Quick start
 
 ```bash
-go run ./cmd/wiki /path/to/a/git/repository
+go run ./cmd/wacky /path/to/a/git/repository
 ```
 
 Then open <http://127.0.0.1:8080>. To serve this project's own documentation:
 
 ```bash
-git init && git add -A && go run ./cmd/wiki .
+git init && git add -A && go run ./cmd/wacky .
 ```
 
 Build a standalone binary — templates and stylesheet are embedded, so it is the
 only file you need to deploy:
 
 ```bash
-go build -o wiki ./cmd/wiki
+go build -o wacky ./cmd/wacky
 ```
 
 ## Usage
 
 ```
-wiki [flags] [repository-path]
+wacky [flags] [repository-path]
 ```
 
 | Flag | Environment | Default | Meaning |
@@ -47,7 +47,7 @@ wiki [flags] [repository-path]
 Timeouts (`-read-timeout`, `-write-timeout`, `-idle-timeout`,
 `-shutdown-timeout`, `-git-timeout`) follow the same flag/environment pattern.
 
-Pointing at a sub-directory narrows the wiki to that sub-tree — `wiki ~/code/app/docs`
+Pointing at a sub-directory narrows the wiki to that sub-tree — `wacky ~/code/app/docs`
 serves `docs/` as the site root, and the rest of the repository stays invisible.
 
 ## Routes
@@ -67,7 +67,7 @@ serves `docs/` as the site root, and the rest of the repository stays invisible.
 
 ```text
 .
-├── cmd/wiki/            # main: flags, dependency wiring, signal handling
+├── cmd/wacky/           # main: flags, dependency wiring, signal handling
 ├── internal/
 │   ├── config/          # flag + environment parsing and validation
 │   ├── git/             # read-only repository access via the git binary

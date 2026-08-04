@@ -1,6 +1,6 @@
 # Compiled binaries
-/wiki
 /wacky
+cmd/wacky/wacky
 *.exe
 
 # Test and profiling output

@@ -9,7 +9,7 @@ state beyond a single, atomically swapped index.
 
 ## Request flow
 
-1. `cmd/wiki` parses configuration, opens the repository, builds the index and
+1. `cmd/wacky` parses configuration, opens the repository, builds the index and
    starts the server. Nothing else touches global state.
 2. `internal/server` routes the request, renders a template into a buffer and
    writes it. Middleware adds panic recovery, request logging and security

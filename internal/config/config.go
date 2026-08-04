@@ -92,10 +92,10 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 	}
 
 	cfg := Default()
-	fs := flag.NewFlagSet("wiki", flag.ContinueOnError)
+	fs := flag.NewFlagSet("wacky", flag.ContinueOnError)
 	fs.SetOutput(output)
 	fs.Usage = func() {
-		fmt.Fprintf(output, "Usage: wiki [flags] [repository-path]\n\nFlags:\n")
+		fmt.Fprintf(output, "Usage: wacky [flags] [repository-path]\n\nFlags:\n")
 		fs.PrintDefaults()
 		fmt.Fprintf(output, "\nEvery flag has a WACKY_-prefixed environment variable equivalent,\n"+
 			"for example WACKY_ADDR or WACKY_RELOAD_INTERVAL.\n")
