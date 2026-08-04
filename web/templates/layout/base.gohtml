@@ -47,9 +47,25 @@
 </div>
 
 <footer class="footer">
-  {{with .Copyright}}<span>{{.}}</span>
-  <span>&middot;</span>{{end}}
-  <span title="{{formatTime .Stats.LoadedAt}}">indexed {{relativeTime .Stats.LoadedAt}}</span>
+  <div class="footer-left">
+    {{- with .Copyright}}
+    <span>{{.}}</span>
+    {{- end}}
+    <span title="{{formatTime .Stats.LoadedAt}}">Indexed {{relativeTime .Stats.LoadedAt}}</span>
+  </div>
+  <div class="footer-right">
+    {{- if .Source}}
+    {{- if .HasHistory}}
+    <span>Last changed {{formatDate .LastCommit.When}} by {{.LastCommit.Author}}</span>
+    <span>{{template "commit" dict "URL" .CommitURL "Commit" .LastCommit}} {{.LastCommit.Subject}}</span>
+    {{- else}}
+    <span>Not committed yet</span>
+    {{- end}}
+    <a href="/raw/{{.Source}}">Source</a>
+    <a href="/history/{{.Source}}">History</a>
+    <span class="muted" title="Repository path">{{.Source}}</span>
+    {{- end}}
+  </div>
 </footer>
 </body>
 </html>

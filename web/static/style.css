@@ -393,31 +393,47 @@ td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
 .snippet { margin: 0.3rem 0 0; color: var(--fg-muted); }
 mark { background: var(--mark); color: inherit; padding: 0 0.15em; }
 
-.page-meta {
-  margin-top: 3rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.83rem;
-  color: var(--fg-muted);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-.page-actions { display: flex; gap: 1rem; }
-
 .muted { color: var(--fg-muted); }
 
 .footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  justify-content: center;
-  padding: 1.25rem 1.5rem 2.5rem;
-  border-top: 1px solid var(--border-soft);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.1rem 1.5rem 2.5rem;
+  border-top: 1px solid var(--border);
   color: var(--fg-muted);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+  min-width: 0;
+}
+.footer-right { justify-content: flex-end; }
+
+.footer-left > * + *::before,
+.footer-right > * + *::before {
+  content: "\00b7";
+  margin-right: 0.6rem;
+  color: var(--border);
 }
 .footer code { font-family: var(--mono); }
+
+@media (max-width: 850px) {
+  .footer {
+    flex-direction: column;
+    padding: 1rem 1rem 2rem;
+    gap: 0.5rem;
+  }
+  .footer-right { justify-content: flex-start; }
+}
 
 .error h1 { font-size: 3.2rem; border: none; margin-bottom: 0.5rem; }

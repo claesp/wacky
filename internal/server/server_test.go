@@ -503,15 +503,15 @@ func crumbHref(t *testing.T, body, name string) string {
 	return tag[:quote]
 }
 
-// The history view carries the same footer as a page: the last change, a link
-// to the source, a self-referencing history link and the repository path. The
-// history view's own RepoPath field must not be mistaken for the request path
-// the breadcrumb trail compares against.
+// A page and its history share one site footer: the last change, a link to the
+// source, a self-referencing history link and the repository path. The history
+// view's own RepoPath field must not be mistaken for the request path the
+// breadcrumb trail compares against.
 func TestHistoryFooterMatchesAPage(t *testing.T) {
 	srv := newTestServer(t)
 
-	pageFooter := footer(t, get(t, srv, "/wacky/docs/setup").Body.String())
-	histFooter := footer(t, get(t, srv, "/history/docs/setup.md").Body.String())
+	pageFooter := footerOf(t, get(t, srv, "/wacky/docs/setup").Body.String())
+	histFooter := footerOf(t, get(t, srv, "/history/docs/setup.md").Body.String())
 
 	if pageFooter != histFooter {
 		t.Errorf("footers differ:\npage:    %s\nhistory: %s", pageFooter, histFooter)
@@ -527,29 +527,14 @@ func TestHistoryFooterMatchesAPage(t *testing.T) {
 		}
 	}
 
-	// The old in-article file name and back link are gone.
+	// None of it is left in the article body.
 	body := get(t, srv, "/history/docs/setup.md").Body.String()
 	article := body[strings.Index(body, "<article"):strings.Index(body, "</article>")]
-	if strings.Contains(article, "back to the page") {
-		t.Error("history article still holds the back link")
+	for _, gone := range []string{"back to the page", "docs/setup.md", "Last changed"} {
+		if strings.Contains(article, gone) {
+			t.Errorf("the article still holds %q:\n%s", gone, article)
+		}
 	}
-	if strings.Contains(article, "docs/setup.md") {
-		t.Errorf("history article still repeats the file name:\n%s", article)
-	}
-}
-
-// footer returns the page-meta block of a rendered page.
-func footer(t *testing.T, body string) string {
-	t.Helper()
-	start := strings.Index(body, `<div class="page-meta">`)
-	if start < 0 {
-		t.Fatalf("no page-meta footer in:\n%s", body)
-	}
-	end := strings.Index(body[start:], "</div>\n</div>")
-	if end < 0 {
-		t.Fatal("page-meta footer is not closed as expected")
-	}
-	return body[start : start+end]
 }
 
 // A history link names the source file, so the home page — whose slug is empty

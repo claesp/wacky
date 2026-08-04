@@ -99,22 +99,89 @@ func footerOf(t *testing.T, body string) string {
 	return body[start : start+strings.Index(body[start:], "</footer>")]
 }
 
-// The footer carries the index age and, when an owner is set, the copyright —
-// and nothing else: a repository's commit count and subjects say nothing about
-// the pages this server renders.
-func TestFooterShowsOnlyIndexAge(t *testing.T) {
-	footerHTML := footerOf(t, get(t, newTestServer(t), "/wacky/docs/setup").Body.String())
+// halves splits the site footer into its left and right blocks.
+func halves(t *testing.T, body string) (left, right string) {
+	t.Helper()
+	f := footerOf(t, body)
 
-	if !strings.Contains(footerHTML, "indexed ") || !strings.Contains(footerHTML, " ago") {
-		t.Errorf("footer does not show a relative index time:\n%s", footerHTML)
+	l := strings.Index(f, `<div class="footer-left">`)
+	r := strings.Index(f, `<div class="footer-right">`)
+	if l < 0 || r < 0 || l > r {
+		t.Fatalf("the footer is not split into halves:\n%s", f)
 	}
-	// The absolute time stays available on hover.
-	if !strings.Contains(footerHTML, "title=") {
-		t.Errorf("footer lost the exact timestamp:\n%s", footerHTML)
+	return f[l:r], f[r:]
+}
+
+// The site's own details sit on the left, the file's on the right, in order:
+// last change, commit, Source, History, file name.
+func TestFooterHalves(t *testing.T) {
+	left, right := halves(t, get(t, newTestServer(t), "/wacky/docs/setup").Body.String())
+
+	if !strings.Contains(left, "Copyright ©") {
+		t.Errorf("the left half lost the copyright:\n%s", left)
 	}
-	for _, gone := range []string{"pages", "write the docs", "0123456789"} {
-		if strings.Contains(footerHTML, gone) {
-			t.Errorf("footer still shows %q:\n%s", gone, footerHTML)
+	if !strings.Contains(left, "Indexed ") || !strings.Contains(left, " ago") {
+		t.Errorf("the left half lost the index time:\n%s", left)
+	}
+	if !strings.Contains(left, `title="20`) {
+		t.Errorf("the left half lost the exact timestamp:\n%s", left)
+	}
+
+	if strings.Contains(left, "Last changed") {
+		t.Errorf("the last change is still on the left:\n%s", left)
+	}
+	if strings.Contains(right, "Copyright") || strings.Contains(right, "Indexed") {
+		t.Errorf("the site details are still on the right:\n%s", right)
+	}
+
+	// The file name is matched by its own span: the path also occurs inside
+	// the Source and History hrefs above it.
+	order := []string{
+		"Last changed 2026-03-04 by Ada", "write the docs", ">Source<", ">History<",
+		`<span class="muted" title="Repository path">docs/setup.md</span>`,
+	}
+	at := -1
+	for _, want := range order {
+		i := strings.Index(right, want)
+		if i < 0 {
+			t.Errorf("the right half is missing %q:\n%s", want, right)
+			continue
+		}
+		if i < at {
+			t.Errorf("%q is out of order in:\n%s", want, right)
+		}
+		at = i
+	}
+}
+
+// A view with no file behind it keeps only the site's own details.
+func TestFooterWithoutAFile(t *testing.T) {
+	left, right := halves(t, get(t, newTestServer(t), "/pages").Body.String())
+
+	if strings.TrimSpace(strings.TrimPrefix(right, `<div class="footer-right">`)) != "</div>" {
+		t.Errorf("the right half is not empty on the page list:\n%s", right)
+	}
+	for _, gone := range []string{"Source", "History", "Last changed"} {
+		if strings.Contains(left, gone) {
+			t.Errorf("the footer shows %q without a file:\n%s", gone, left)
+		}
+	}
+	if !strings.Contains(left, "Indexed ") {
+		t.Errorf("the index age is missing:\n%s", left)
+	}
+}
+
+// Footer items are separated by a dot, drawn by CSS rather than markup.
+func TestFooterItemsAreSeparated(t *testing.T) {
+	css := get(t, newTestServer(t), "/static/style.css").Body.String()
+
+	for _, want := range []string{
+		".footer-left > * + *::before",
+		".footer-right > * + *::before",
+		`content: "\00b7"`,
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("the stylesheet is missing %q", want)
 		}
 	}
 }

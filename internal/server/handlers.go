@@ -28,6 +28,11 @@ type layout struct {
 	Copyright string
 	// CommitURL is the base URL commit hashes link to, empty when unset.
 	CommitURL string
+	// Source is the repository file behind the view, empty on views that are
+	// not backed by one. The site footer keys its file details off it.
+	Source     string
+	LastCommit git.Commit
+	HasHistory bool
 	// Path is the request path, used to mark the current navigation entry.
 	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
@@ -75,8 +80,6 @@ type pageView struct {
 	Page        *wacky.Page
 	Doc         markdown.Document
 	Breadcrumbs []wacky.Breadcrumb
-	LastCommit  git.Commit
-	HasHistory  bool
 }
 
 // dirView renders a directory that has no index page.
@@ -111,10 +114,6 @@ type historyView struct {
 	Page        *wacky.Page
 	Commits     []git.Commit
 	Breadcrumbs []wacky.Breadcrumb
-	// LastCommit is Commits[0], carried separately so the footer partial can
-	// be shared with the page view.
-	LastCommit git.Commit
-	HasHistory bool
 	// Truncated reports that the file has more commits than Limit, which is
 	// the number actually listed.
 	Truncated bool
@@ -201,6 +200,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wacky.
 		Doc:         doc,
 		Breadcrumbs: s.store.Breadcrumbs(page.Slug),
 	}
+	view.Source = page.Path
 
 	ctx, cancel := s.timeoutFor(r)
 	defer cancel()
@@ -311,6 +311,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		Truncated:   truncated,
 		Limit:       limit,
 	}
+	view.Source = repoPath
 	if len(commits) > 0 {
 		view.LastCommit = commits[0]
 		view.HasHistory = true
