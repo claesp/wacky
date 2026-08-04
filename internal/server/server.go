@@ -7,11 +7,15 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/claesp/wacky/internal/config"
@@ -26,6 +30,9 @@ type Server struct {
 	log   *slog.Logger
 	tmpl  *templates
 	mux   http.Handler
+	// assets is a content hash of the embedded static files, appended to
+	// their URLs so a new binary invalidates the browser's copy.
+	assets string
 }
 
 // New builds a Server. Templates are parsed once, up front, so a broken
@@ -39,13 +46,42 @@ func New(cfg config.Config, store *wiki.Store, log *slog.Logger) (*Server, error
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
-	s := &Server{cfg: cfg, store: store, log: log, tmpl: tmpl}
-	handler, err := s.routes()
+	static, err := web.Static()
+	if err != nil {
+		return nil, fmt.Errorf("static assets: %w", err)
+	}
+
+	s := &Server{cfg: cfg, store: store, log: log, tmpl: tmpl, assets: assetVersion(static)}
+	handler, err := s.routes(static)
 	if err != nil {
 		return nil, err
 	}
 	s.mux = handler
 	return s, nil
+}
+
+// assetVersion hashes the embedded static files. The value only changes when
+// the binary does, which is exactly when a cached copy must be discarded.
+func assetVersion(fsys fs.FS) string {
+	sum := sha256.New()
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return err
+		}
+		sum.Write([]byte(p))
+		sum.Write(data)
+		return nil
+	})
+	if err != nil {
+		// A hash we cannot compute must not pin a stale stylesheet, so fall
+		// back to a value that changes every run.
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(sum.Sum(nil))[:12]
 }
 
 // ServeHTTP makes Server an http.Handler, which keeps it directly testable
@@ -55,12 +91,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // routes registers every endpoint and wraps the mux in the middleware chain.
-func (s *Server) routes() (http.Handler, error) {
-	static, err := web.Static()
-	if err != nil {
-		return nil, fmt.Errorf("static assets: %w", err)
-	}
-
+func (s *Server) routes(static fs.FS) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleHome)
 	mux.HandleFunc("GET /wiki/{path...}", s.handlePage)
@@ -142,11 +173,16 @@ func refOrWorkingTree(ref string) string {
 	return ref
 }
 
-// cacheStatic marks embedded assets as immutable for a day; they only change
-// when the binary does.
+// cacheStatic caches an asset forever when the URL carries a content version,
+// and only briefly otherwise. Caching an unversioned URL for long would keep a
+// stylesheet fix from ever reaching a browser that already has the old one.
 func cacheStatic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=300")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

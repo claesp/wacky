@@ -23,6 +23,8 @@ type layout struct {
 	Nav       []*wiki.Node
 	Stats     wiki.Stats
 	Now       time.Time
+	// Assets versions the stylesheet URL so a new binary is picked up at once.
+	Assets string
 }
 
 func (s *Server) layout(title, slug string) layout {
@@ -34,6 +36,7 @@ func (s *Server) layout(title, slug string) layout {
 		Nav:       s.store.Tree().Children,
 		Stats:     s.store.Stats(),
 		Now:       time.Now(),
+		Assets:    s.assets,
 	}
 }
 

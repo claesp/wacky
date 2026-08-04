@@ -216,6 +216,30 @@ func TestConditionalGet(t *testing.T) {
 	}
 }
 
+// A stylesheet fix must reach a browser that already cached the old one, so
+// the link carries a content version and only versioned URLs cache forever.
+func TestStylesheetIsVersioned(t *testing.T) {
+	srv := newTestServer(t)
+
+	body := get(t, srv, "/").Body.String()
+	if !strings.Contains(body, `href="/static/style.css?v=`+srv.assets+`"`) {
+		t.Errorf("stylesheet link is not versioned:\n%s", body)
+	}
+	if srv.assets == "" {
+		t.Fatal("asset version is empty")
+	}
+
+	versioned := get(t, srv, "/static/style.css?v="+srv.assets).Header().Get("Cache-Control")
+	if !strings.Contains(versioned, "immutable") {
+		t.Errorf("versioned asset Cache-Control = %q, want it to be immutable", versioned)
+	}
+
+	plain := get(t, srv, "/static/style.css").Header().Get("Cache-Control")
+	if strings.Contains(plain, "immutable") || strings.Contains(plain, "max-age=86400") {
+		t.Errorf("unversioned asset Cache-Control = %q, want a short lifetime", plain)
+	}
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	srv := newTestServer(t)
 	rec := get(t, srv, "/")

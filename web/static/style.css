@@ -12,6 +12,9 @@
   --mark: #fff2a8;
   --code-bg: #f3f4f6;
   --radius: 6px;
+  /* Height of the sticky header. Anchor targets reserve this much space above
+     themselves so a jump to #section does not land under the bar. */
+  --topbar-height: 4rem;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -137,6 +140,12 @@ a:hover { text-decoration: underline; }
 @media (max-width: 850px) {
   .shell { grid-template-columns: 1fr; gap: 1rem; }
   .sidebar { order: 2; border-top: 1px solid var(--border); padding-top: 1rem; }
+
+  /* The header wraps to three rows at this width, which would eat a fifth of
+     a phone screen and leave no offset that suits every layout. Letting it
+     scroll away instead keeps in-page links landing on their heading. */
+  :root { --topbar-height: 0rem; }
+  .topbar { position: static; }
 }
 
 .sidebar { font-size: 0.92rem; }
@@ -175,6 +184,13 @@ main { min-width: 0; }
   line-height: 1.25;
   margin: 1.8rem 0 0.6rem;
 }
+/* Keep an in-page jump clear of the sticky header: without this the browser
+   aligns the target with the top of the viewport, behind the bar. */
+.page [id],
+.page h1, .page h2, .page h3, .page h4, .page h5, .page h6 {
+  scroll-margin-top: calc(var(--topbar-height) + 0.75rem);
+}
+
 .page h1 { font-size: 1.9rem; }
 .page h2 { font-size: 1.45rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--border); }
 .page h3 { font-size: 1.2rem; }
