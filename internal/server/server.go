@@ -7,15 +7,11 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/claesp/wacky/internal/config"
@@ -30,9 +26,8 @@ type Server struct {
 	log   *slog.Logger
 	tmpl  *templates
 	mux   http.Handler
-	// assets is a content hash of the embedded static files, appended to
-	// their URLs so a new binary invalidates the browser's copy.
-	assets string
+	// assets holds the embedded static files, pre-compressed and versioned.
+	assets *assets
 }
 
 // New builds a Server. Templates are parsed once, up front, so a broken
@@ -46,42 +41,22 @@ func New(cfg config.Config, store *wacky.Store, log *slog.Logger) (*Server, erro
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
-	static, err := web.Static()
+	staticFS, err := web.Static()
+	if err != nil {
+		return nil, fmt.Errorf("static assets: %w", err)
+	}
+	static, err := newAssets(staticFS)
 	if err != nil {
 		return nil, fmt.Errorf("static assets: %w", err)
 	}
 
-	s := &Server{cfg: cfg, store: store, log: log, tmpl: tmpl, assets: assetVersion(static)}
-	handler, err := s.routes(static)
+	s := &Server{cfg: cfg, store: store, log: log, tmpl: tmpl, assets: static}
+	handler, err := s.routes()
 	if err != nil {
 		return nil, err
 	}
 	s.mux = handler
 	return s, nil
-}
-
-// assetVersion hashes the embedded static files. The value only changes when
-// the binary does, which is exactly when a cached copy must be discarded.
-func assetVersion(fsys fs.FS) string {
-	sum := sha256.New()
-	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		data, err := fs.ReadFile(fsys, p)
-		if err != nil {
-			return err
-		}
-		sum.Write([]byte(p))
-		sum.Write(data)
-		return nil
-	})
-	if err != nil {
-		// A hash we cannot compute must not pin a stale stylesheet, so fall
-		// back to a value that changes every run.
-		return strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
-	return hex.EncodeToString(sum.Sum(nil))[:12]
 }
 
 // ServeHTTP makes Server an http.Handler, which keeps it directly testable
@@ -91,7 +66,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // routes registers every endpoint and wraps the mux in the middleware chain.
-func (s *Server) routes(static fs.FS) (http.Handler, error) {
+func (s *Server) routes() (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleHome)
 	mux.HandleFunc("GET /wacky/{path...}", s.handlePage)
@@ -100,7 +75,7 @@ func (s *Server) routes(static fs.FS) (http.Handler, error) {
 	mux.HandleFunc("GET /pages", s.handleIndex)
 	mux.HandleFunc("GET /search", s.handleSearch)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServerFS(static))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(s.assets)))
 	// Registering the catch-all for GET only lets the mux answer any other
 	// method with 405: this server never accepts a write.
 	mux.HandleFunc("GET /", s.handleNotFound)

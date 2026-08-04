@@ -733,14 +733,14 @@ func TestStylesheetIsVersioned(t *testing.T) {
 	srv := newTestServer(t)
 
 	body := get(t, srv, "/").Body.String()
-	if !strings.Contains(body, `href="/static/style.css?v=`+srv.assets+`"`) {
+	if !strings.Contains(body, `href="/static/style.css?v=`+srv.assets.version+`"`) {
 		t.Errorf("stylesheet link is not versioned:\n%s", body)
 	}
-	if srv.assets == "" {
+	if srv.assets.version == "" {
 		t.Fatal("asset version is empty")
 	}
 
-	versioned := get(t, srv, "/static/style.css?v="+srv.assets).Header().Get("Cache-Control")
+	versioned := get(t, srv, "/static/style.css?v="+srv.assets.version).Header().Get("Cache-Control")
 	if !strings.Contains(versioned, "immutable") {
 		t.Errorf("versioned asset Cache-Control = %q, want it to be immutable", versioned)
 	}

@@ -46,7 +46,7 @@ func (s *Server) layout(r *http.Request, title, slug string) layout {
 		Copyright: copyrightNotice(s.cfg.Owner, stats.First.When.Year(), time.Now().Year()),
 		CommitURL: s.cfg.CommitURL,
 		Path:      r.URL.Path,
-		Assets:    s.assets,
+		Assets:    s.assets.version,
 	}
 }
 
