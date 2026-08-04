@@ -35,6 +35,17 @@
 
 * { box-sizing: border-box; }
 
+/* Animate in-page jumps so a table-of-contents link shows the reader where it
+   moved to. Only navigation and script scrolls are affected; wheel, trackpad
+   and touch scrolling stay native. */
+html { scroll-behavior: smooth; }
+
+/* Animated scrolling can trigger motion sickness, so honour the reader's
+   system-level preference. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
 body {
   margin: 0;
   background: var(--bg);
