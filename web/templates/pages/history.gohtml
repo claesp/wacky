@@ -2,7 +2,8 @@
 {{template "breadcrumbs" dict "Trail" .Breadcrumbs "Path" .Path}}
 
 <article class="page">
-  <h1>History</h1>
+  <h1>{{.Heading}}</h1>
+  <h2>History</h2>
 
   {{if .Commits}}
   <div class="table-wrap">

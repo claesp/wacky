@@ -79,7 +79,10 @@ type historyView struct {
 	layout
 	// RepoPath is the file the history belongs to. It is deliberately not
 	// called Path, which would shadow layout.Path in templates.
-	RepoPath    string
+	RepoPath string
+	// Heading is the title of the page the history belongs to, or the file
+	// name for a file that is not a page.
+	Heading     string
 	Page        *wiki.Page
 	Commits     []git.Commit
 	Breadcrumbs []wiki.Breadcrumb
@@ -245,11 +248,11 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Breadcrumbs follow the page's own slug; a file that is not a page falls
-	// back to its path.
-	crumbPath := target
+	// Breadcrumbs and the heading follow the page; a file that is not a page
+	// falls back to its path.
+	crumbPath, heading := target, path.Base(repoPath)
 	if isPage {
-		crumbPath = page.Slug
+		crumbPath, heading = page.Slug, page.Title
 	}
 
 	ctx, cancel := s.timeoutFor(r)
@@ -262,8 +265,9 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := historyView{
-		layout:      s.layout(r, "History of "+path.Base(repoPath), crumbPath),
+		layout:      s.layout(r, "History of "+heading, crumbPath),
 		RepoPath:    repoPath,
+		Heading:     heading,
 		Page:        page,
 		Commits:     commits,
 		Breadcrumbs: s.store.Breadcrumbs(crumbPath),

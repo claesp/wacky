@@ -529,6 +529,29 @@ func TestHistoryWithoutAFile(t *testing.T) {
 	}
 }
 
+// The history page is headed by the page's own title, with History below it.
+func TestHistoryHeadings(t *testing.T) {
+	srv := newTestServer(t)
+
+	tests := []struct{ target, wantH1 string }{
+		{"/history/README.md", "<h1>Handbook</h1>"},           // the page's title
+		{"/history/docs/setup.md", "<h1>Setup</h1>"},          // ditto
+		{"/history/docs/diagram.png", "<h1>diagram.png</h1>"}, // not a page: file name
+	}
+	for _, tt := range tests {
+		body := get(t, srv, tt.target).Body.String()
+		if !strings.Contains(body, tt.wantH1) {
+			t.Errorf("GET %s: missing %q", tt.target, tt.wantH1)
+		}
+		if !strings.Contains(body, "<h2>History</h2>") {
+			t.Errorf("GET %s: missing the History subheading", tt.target)
+		}
+		if strings.Contains(body, "<h1>History</h1>") {
+			t.Errorf("GET %s: History is still the top-level heading", tt.target)
+		}
+	}
+}
+
 // Slug-form history URLs predate the file-form ones and must keep working.
 func TestHistoryAcceptsSlugForm(t *testing.T) {
 	srv := newTestServer(t)
