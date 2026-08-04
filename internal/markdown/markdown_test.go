@@ -229,6 +229,70 @@ func TestResolveLinkAndWiki(t *testing.T) {
 	}
 }
 
+// Lead and Rest let a caller slot content between the title and the text.
+// Together they must always reproduce HTML exactly.
+func TestDocumentLeadAndRest(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      string
+		wantLead string
+	}{
+		{
+			name:     "opens with a heading",
+			src:      "# Title\n\nFirst paragraph.\n\n## Section\n",
+			wantLead: `<h1 id="title">`,
+		},
+		{
+			name:     "a lower heading opens it too",
+			src:      "### Small\n\nText.\n",
+			wantLead: `<h3 id="small">`,
+		},
+		{
+			name:     "opens with a paragraph",
+			src:      "Just text.\n\n# Later Heading\n",
+			wantLead: "",
+		},
+		{
+			name:     "opens with a list",
+			src:      "- one\n- two\n\n# Later\n",
+			wantLead: "",
+		},
+		{
+			name:     "front matter does not count as content",
+			src:      "---\ntitle: T\n---\n\n# Title\n\nText.\n",
+			wantLead: `<h1 id="title">`,
+		},
+		{
+			name:     "a heading inside a quote does not open the document",
+			src:      "> # Quoted\n\nText.\n",
+			wantLead: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := render(t, tt.src)
+
+			if string(doc.Lead)+string(doc.Rest) != string(doc.HTML) {
+				t.Errorf("Lead+Rest != HTML:\nlead: %q\nrest: %q\nhtml: %q", doc.Lead, doc.Rest, doc.HTML)
+			}
+			if tt.wantLead == "" {
+				if doc.Lead != "" {
+					t.Errorf("Lead = %q, want it empty", doc.Lead)
+				}
+				return
+			}
+			if !strings.HasPrefix(string(doc.Lead), tt.wantLead) {
+				t.Errorf("Lead = %q, want it to start with %q", doc.Lead, tt.wantLead)
+			}
+			// Only the opening heading, nothing after it.
+			if strings.Contains(string(doc.Lead), "<p>") {
+				t.Errorf("Lead reaches past the heading: %q", doc.Lead)
+			}
+		})
+	}
+}
+
 // Rendering must be a pure function of its input.
 func TestRenderIsDeterministic(t *testing.T) {
 	src := "# Title\n\nSome *text* with `code`.\n\n- a\n- b\n\n| x | y |\n|---|---|\n| 1 | 2 |\n"

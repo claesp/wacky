@@ -12,6 +12,9 @@ import (
 type state struct {
 	slugs    map[string]int
 	headings []Heading
+	// leadEnd is the offset just past the document's opening heading, or zero
+	// when it does not start with one.
+	leadEnd int
 }
 
 // parser renders a sequence of lines into out.
@@ -19,6 +22,9 @@ type parser struct {
 	opts  Options
 	state *state
 	out   strings.Builder
+	// top marks the parser rendering the document itself rather than the
+	// contents of a nested block.
+	top bool
 }
 
 // child returns a parser that writes to its own buffer but shares document
@@ -148,12 +154,20 @@ func (p *parser) atxHeading(line string) {
 }
 
 func (p *parser) emitHeading(level int, text string) {
+	// Nothing written yet by the document's own parser means this heading
+	// opens the document.
+	opensDocument := p.top && p.out.Len() == 0
+
 	plain := plainText(text)
 	id := p.slug(plain)
 	p.state.headings = append(p.state.headings, Heading{Level: level, Text: plain, ID: id})
 
 	fmt.Fprintf(&p.out, "<h%d id=%q>%s<a class=\"anchor\" href=\"#%s\" aria-label=\"Link to this section\">#</a></h%d>\n",
 		level, id, p.inline(text), html.EscapeString(id), level)
+
+	if opensDocument {
+		p.state.leadEnd = p.out.Len()
+	}
 }
 
 // slug derives a stable, unique anchor from heading text.

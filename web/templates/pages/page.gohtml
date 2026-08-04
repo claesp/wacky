@@ -2,8 +2,9 @@
 {{template "breadcrumbs" dict "Trail" .Breadcrumbs "Path" .Path}}
 
 <article class="page">
+  {{.Doc.Lead}}
   {{template "toc" .Doc.TOC}}
-  {{.Doc.HTML}}
+  {{.Doc.Rest}}
 </article>
 
 {{- end}}

@@ -25,6 +25,13 @@ type Document struct {
 	Title string
 	// HTML is the rendered body.
 	HTML template.HTML
+	// Lead is the opening heading when the document starts with one, and Rest
+	// is everything after it; otherwise Lead is empty and Rest is the whole
+	// body. Concatenated they are HTML. The split lets a caller place
+	// something between the title and the text, which is how the page
+	// template aligns its table of contents with the first paragraph.
+	Lead template.HTML
+	Rest template.HTML
 	// TOC lists the headings in document order.
 	TOC []Heading
 	// Meta holds the front matter keys, lowercased.
@@ -59,13 +66,19 @@ func New() *Renderer { return &Renderer{} }
 func (r *Renderer) Render(src []byte, opts Options) Document {
 	body, meta := splitFrontMatter(normalizeNewlines(string(src)))
 
-	p := &parser{opts: opts, state: &state{slugs: make(map[string]int)}}
+	p := &parser{opts: opts, state: &state{slugs: make(map[string]int)}, top: true}
 	p.blocks(strings.Split(body, "\n"))
 
+	html := p.out.String()
 	doc := Document{
-		HTML: template.HTML(p.out.String()), //nolint:gosec // every value is escaped during rendering
+		HTML: template.HTML(html), //nolint:gosec // every value is escaped during rendering
+		Rest: template.HTML(html), //nolint:gosec // same bytes as HTML
 		TOC:  p.state.headings,
 		Meta: meta,
+	}
+	if n := p.state.leadEnd; n > 0 && n <= len(html) {
+		doc.Lead = template.HTML(html[:n]) //nolint:gosec // same bytes as HTML
+		doc.Rest = template.HTML(html[n:]) //nolint:gosec // same bytes as HTML
 	}
 	doc.Title = documentTitle(meta, p.state.headings)
 	return doc
