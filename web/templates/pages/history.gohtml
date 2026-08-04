@@ -1,0 +1,30 @@
+{{define "content" -}}
+{{template "breadcrumbs" .Breadcrumbs}}
+
+<article class="page">
+  <h1>History</h1>
+  <p class="muted"><code>{{.Path}}</code>{{with .Page}} &mdash; <a href="{{.URL}}">back to the page</a>{{end}}</p>
+
+  {{if .Commits}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Commit</th><th>When</th><th>Author</th><th>Subject</th></tr>
+      </thead>
+      <tbody>
+        {{- range .Commits}}
+        <tr>
+          <td><code>{{.Short}}</code></td>
+          <td>{{formatTime .When}}</td>
+          <td>{{.Author}}</td>
+          <td>{{.Subject}}</td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p>This file has no commits yet.</p>
+  {{end}}
+</article>
+{{- end}}

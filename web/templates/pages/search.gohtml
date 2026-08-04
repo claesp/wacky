@@ -1,0 +1,22 @@
+{{define "content" -}}
+<article class="page">
+  <h1>Search</h1>
+
+  {{if not .Query}}
+  <p class="muted">Type a word or phrase in the box above to search page titles and contents.</p>
+  {{else if not .Results}}
+  <p>Nothing matched <strong>{{.Query}}</strong>.</p>
+  {{else}}
+  <p class="muted">{{.Total}} page{{if ne .Total 1}}s{{end}} matched <strong>{{.Query}}</strong>.</p>
+  <ol class="results">
+    {{- range .Results}}
+    <li>
+      <a class="result-title" href="{{.Page.URL}}">{{.Page.Title}}</a>
+      <div class="muted"><code>{{.Page.Path}}</code></div>
+      <p class="snippet">{{.Snippet}}</p>
+    </li>
+    {{- end}}
+  </ol>
+  {{end}}
+</article>
+{{- end}}

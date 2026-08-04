@@ -1,0 +1,18 @@
+{{define "content" -}}
+{{template "breadcrumbs" .Breadcrumbs}}
+
+<article class="page">
+  <h1>{{.Dir}}</h1>
+  <p class="muted">This directory has no index page. It contains:</p>
+
+  <ul class="listing">
+    {{- range .Children}}
+    <li>
+      <a href="{{.URL}}">{{.Name}}</a>
+      {{- if .IsDir}} <span class="badge">directory</span>{{end}}
+      {{- with .Page}}<span class="muted"> &mdash; {{.Path}}</span>{{end}}
+    </li>
+    {{- end}}
+  </ul>
+</article>
+{{- end}}

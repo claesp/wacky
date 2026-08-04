@@ -1,0 +1,28 @@
+{{define "content" -}}
+<article class="page">
+  <h1>All pages</h1>
+  <p class="muted">{{len .Pages}} Markdown files in {{.Stats.Root}}</p>
+
+  {{if .Pages}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Title</th><th>Path</th><th>Size</th><th>Modified</th></tr>
+      </thead>
+      <tbody>
+        {{- range .Pages}}
+        <tr>
+          <td><a href="{{.URL}}">{{.Title}}</a></td>
+          <td><code>{{.Path}}</code></td>
+          <td class="numeric">{{humanSize .Size}}</td>
+          <td>{{formatDate .ModTime}}</td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p>No Markdown files were found in this repository.</p>
+  {{end}}
+</article>
+{{- end}}

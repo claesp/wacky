@@ -1,0 +1,283 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/claesp/wacky/internal/config"
+	"github.com/claesp/wacky/internal/git"
+	"github.com/claesp/wacky/internal/markdown"
+	"github.com/claesp/wacky/internal/wiki"
+)
+
+// fakeSource satisfies wiki.Source without touching a real repository.
+type fakeSource struct{ files map[string]string }
+
+func (f *fakeSource) Root() string { return "/fake/repo" }
+func (f *fakeSource) Ref() string  { return "" }
+
+func (f *fakeSource) Files(context.Context) ([]git.File, error) {
+	paths := make([]string, 0, len(f.files))
+	for p := range f.files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	out := make([]git.File, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, git.File{
+			Path:    p,
+			Size:    int64(len(f.files[p])),
+			ModTime: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC),
+		})
+	}
+	return out, nil
+}
+
+func (f *fakeSource) Read(_ context.Context, rel string) ([]byte, error) {
+	content, ok := f.files[rel]
+	if !ok {
+		return nil, git.ErrNotFound
+	}
+	return []byte(content), nil
+}
+
+func (f *fakeSource) Log(context.Context, string, int) ([]git.Commit, error) {
+	return []git.Commit{{
+		Hash: "0123456789abcdef", Author: "Ada", Email: "ada@example.com",
+		When: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC), Subject: "write the docs",
+	}}, nil
+}
+
+func (f *fakeSource) Head(context.Context) (git.Commit, error) {
+	return git.Commit{Hash: "0123456789abcdef", Subject: "write the docs"}, nil
+}
+
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
+
+	src := &fakeSource{files: map[string]string{
+		"README.md":          "# Handbook\n\nStart at [setup](docs/setup.md).\n",
+		"docs/setup.md":      "# Setup\n\nRun the installer. Contact <a@example.com>.\n",
+		"docs/diagram.png":   "\x89PNG fake",
+		"guides/deep/adv.md": "# Advanced\n\nDetails about scaling.\n",
+		"LICENSE":            "MIT",
+	}}
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := wiki.NewStore(src, markdown.New(), log)
+	if err := store.Reload(context.Background()); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+
+	cfg := config.Default()
+	cfg.Title = "Test Wiki"
+	cfg.RepoPath = "/fake/repo"
+
+	srv, err := New(cfg, store, log)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return srv
+}
+
+func get(t *testing.T, srv *Server, target string, headers ...[2]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	for _, h := range headers {
+		req.Header.Set(h[0], h[1])
+	}
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestRoutes(t *testing.T) {
+	srv := newTestServer(t)
+
+	tests := []struct {
+		name       string
+		target     string
+		wantStatus int
+		wantBody   []string
+	}{
+		{"home", "/", http.StatusOK, []string{"Handbook", `href="/wiki/docs/setup"`}},
+		{"page", "/wiki/docs/setup", http.StatusOK, []string{"<h1 id=\"setup\">Setup", "Run the installer"}},
+		{"nested page", "/wiki/guides/deep/adv", http.StatusOK, []string{"Advanced"}},
+		{"page list", "/pages", http.StatusOK, []string{"All pages", "docs/setup.md"}},
+		{"search hit", "/search?q=installer", http.StatusOK, []string{"<mark>installer</mark>", "Setup"}},
+		{"search miss", "/search?q=zzzznothing", http.StatusOK, []string{"Nothing matched"}},
+		{"history", "/history/docs/setup", http.StatusOK, []string{"write the docs", "Ada"}},
+		{"directory listing", "/wiki/guides", http.StatusOK, []string{"no index page", "Advanced"}},
+		{"missing page", "/wiki/nope", http.StatusNotFound, []string{"There is no page at nope"}},
+		{"unknown route", "/nothing/here", http.StatusNotFound, []string{"404"}},
+		{"stylesheet", "/static/style.css", http.StatusOK, []string{"--accent"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := get(t, srv, tt.target)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("GET %s = %d, want %d\n%s", tt.target, rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			body := rec.Body.String()
+			for _, want := range tt.wantBody {
+				if !strings.Contains(body, want) {
+					t.Errorf("GET %s: body missing %q\n%s", tt.target, want, body)
+				}
+			}
+		})
+	}
+}
+
+func TestPageRedirects(t *testing.T) {
+	srv := newTestServer(t)
+
+	tests := []struct{ target, location string }{
+		{"/wiki/docs/setup/", "/wiki/docs/setup"},
+		{"/wiki/docs/setup.md", "/wiki/docs/setup"},
+		{"/wiki/docs/diagram.png", "/raw/docs/diagram.png"},
+	}
+	for _, tt := range tests {
+		rec := get(t, srv, tt.target)
+		if rec.Code != http.StatusMovedPermanently {
+			t.Errorf("GET %s = %d, want 301", tt.target, rec.Code)
+			continue
+		}
+		if got := rec.Header().Get("Location"); got != tt.location {
+			t.Errorf("GET %s redirected to %q, want %q", tt.target, got, tt.location)
+		}
+	}
+}
+
+func TestRawServing(t *testing.T) {
+	srv := newTestServer(t)
+
+	rec := get(t, srv, "/raw/docs/diagram.png")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
+		t.Errorf("Content-Type = %q, want image/png", ct)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); cd != "" {
+		t.Errorf("image was offered as a download: %q", cd)
+	}
+
+	// An unknown type must never be rendered inline by the browser.
+	rec = get(t, srv, "/raw/LICENSE")
+	if ct := rec.Header().Get("Content-Type"); ct != "application/octet-stream" {
+		t.Errorf("Content-Type = %q, want application/octet-stream", ct)
+	}
+	if !strings.HasPrefix(rec.Header().Get("Content-Disposition"), "attachment") {
+		t.Error("unknown file type was not sent as an attachment")
+	}
+
+	rec = get(t, srv, "/raw/docs/setup.md")
+	if !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") {
+		t.Errorf("Markdown source served as %q", rec.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(rec.Body.String(), "# Setup") {
+		t.Error("raw Markdown was not returned verbatim")
+	}
+}
+
+// Repeating a GET must be free of side effects and cheap: the second request
+// with the returned ETag is answered with 304.
+func TestConditionalGet(t *testing.T) {
+	srv := newTestServer(t)
+
+	first := get(t, srv, "/wiki/docs/setup")
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("no ETag on a page response")
+	}
+
+	second := get(t, srv, "/wiki/docs/setup", [2]string{"If-None-Match", etag})
+	if second.Code != http.StatusNotModified {
+		t.Errorf("conditional GET = %d, want 304", second.Code)
+	}
+	if second.Body.Len() != 0 {
+		t.Errorf("304 response had a body of %d bytes", second.Body.Len())
+	}
+
+	// Same request, same answer.
+	third := get(t, srv, "/wiki/docs/setup")
+	if third.Body.String() != first.Body.String() {
+		t.Error("repeating a GET produced a different page")
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	srv := newTestServer(t)
+	rec := get(t, srv, "/")
+
+	want := map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "no-referrer",
+	}
+	for header, value := range want {
+		if got := rec.Header().Get(header); got != value {
+			t.Errorf("%s = %q, want %q", header, got, value)
+		}
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'none'") {
+		t.Errorf("CSP = %q, want it to forbid scripts", csp)
+	}
+}
+
+// Every route is read-only, so anything but GET or HEAD must be refused.
+func TestWriteMethodsAreRejected(t *testing.T) {
+	srv := newTestServer(t)
+
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		req := httptest.NewRequest(method, "/wiki/docs/setup", nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s /wiki/docs/setup = %d, want 405", method, rec.Code)
+		}
+	}
+}
+
+func TestHealth(t *testing.T) {
+	srv := newTestServer(t)
+	rec := get(t, srv, "/healthz")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body struct {
+		Status string `json:"status"`
+		Pages  int    `json:"pages"`
+		Ref    string `json:"ref"`
+		Commit string `json:"commit"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+	}
+	if body.Status != "ok" || body.Pages != 3 || body.Ref != "working tree" {
+		t.Errorf("health = %+v", body)
+	}
+}
+
+func TestTemplatesParse(t *testing.T) {
+	// newTestServer already fails on a broken template; this asserts every
+	// page template is present in the set.
+	srv := newTestServer(t)
+	for _, name := range []string{"page.gohtml", "dir.gohtml", "index.gohtml", "search.gohtml", "history.gohtml", "error.gohtml"} {
+		if _, ok := srv.tmpl.set[name]; !ok {
+			t.Errorf("template %q was not parsed", name)
+		}
+	}
+}

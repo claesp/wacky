@@ -1,0 +1,48 @@
+{{define "base.gohtml" -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{with .PageTitle}}{{.}} &middot; {{end}}{{.Site}}</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+
+<header class="topbar">
+  <a class="brand" href="/">{{.Site}}</a>
+  <form class="search" action="/search" method="get" role="search">
+    <label class="visually-hidden" for="q">Search the wiki</label>
+    <input id="q" name="q" type="search" placeholder="Search&hellip;" value="{{.Query}}">
+    <button type="submit">Search</button>
+  </form>
+  <nav class="topnav">
+    <a href="/pages">All pages</a>
+    {{if .Ref}}<span class="ref" title="Serving a pinned revision">{{.Ref}}</span>{{end}}
+  </nav>
+</header>
+
+<div class="shell">
+  <aside class="sidebar">
+    <h2 class="sidebar-title">Contents</h2>
+    {{template "nav" .}}
+  </aside>
+
+  <main id="content">
+    {{template "content" .}}
+  </main>
+</div>
+
+<footer class="footer">
+  <span>{{.Stats.Pages}} pages</span>
+  <span>&middot;</span>
+  <span title="{{.Stats.Root}}">{{.Stats.Head.Subject}}</span>
+  {{with .Stats.Head.Short}}<span>&middot;</span><code>{{.}}</code>{{end}}
+  <span>&middot;</span>
+  <span>indexed {{formatTime .Stats.LoadedAt}}</span>
+</footer>
+</body>
+</html>
+{{- end}}

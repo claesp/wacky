@@ -1,0 +1,12 @@
+# Compiled binaries
+/wiki
+/wacky
+*.exe
+
+# Test and profiling output
+*.out
+*.test
+coverage.*
+
+# macOS
+.DS_Store

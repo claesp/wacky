@@ -1,0 +1,57 @@
+{{define "nav" -}}
+{{- if .Nav -}}
+<ul class="nav">
+  {{- range .Nav}}
+  {{template "nav-node" dict "Node" . "Current" $.Slug}}
+  {{- end}}
+</ul>
+{{- else -}}
+<p class="muted">This repository contains no Markdown files.</p>
+{{- end -}}
+{{- end}}
+
+{{define "nav-node" -}}
+{{- $node := .Node -}}
+{{- $current := .Current -}}
+<li>
+  {{- if or $node.Page (not $node.IsDir)}}
+  <a href="{{$node.URL}}"{{if eq $node.Slug $current}} class="active" aria-current="page"{{end}}>{{$node.Name}}</a>
+  {{- else}}
+  <span class="nav-dir">{{$node.Name}}</span>
+  {{- end}}
+  {{- if $node.IsDir}}
+  <ul>
+    {{- range $node.Children}}
+    {{template "nav-node" dict "Node" . "Current" $current}}
+    {{- end}}
+  </ul>
+  {{- end}}
+</li>
+{{- end}}
+
+{{define "breadcrumbs" -}}
+{{- if . -}}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/">Home</a>
+  {{- range .}}
+  <span aria-hidden="true">/</span>
+  <a href="{{.URL}}">{{.Name}}</a>
+  {{- end}}
+</nav>
+{{- end -}}
+{{- end}}
+
+{{define "toc" -}}
+{{- if gt (len .) 1 -}}
+<nav class="toc" aria-label="On this page">
+  <h2>On this page</h2>
+  <ul>
+    {{- range .}}
+    {{- if le .Level 3}}
+    <li class="toc-l{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>
+    {{- end}}
+    {{- end}}
+  </ul>
+</nav>
+{{- end -}}
+{{- end}}

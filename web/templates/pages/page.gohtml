@@ -1,0 +1,24 @@
+{{define "content" -}}
+{{template "breadcrumbs" .Breadcrumbs}}
+
+<article class="page">
+  {{template "toc" .Doc.TOC}}
+  {{.Doc.HTML}}
+</article>
+
+<div class="page-meta">
+  <div>
+    {{if .HasHistory -}}
+    Last changed {{formatDate .LastCommit.When}} by {{.LastCommit.Author}}
+    &mdash; <code>{{.LastCommit.Short}}</code> {{.LastCommit.Subject}}
+    {{- else -}}
+    Not committed yet
+    {{- end}}
+  </div>
+  <div class="page-actions">
+    <a href="/raw/{{.Page.Path}}">Source</a>
+    <a href="/history/{{.Page.Slug}}">History</a>
+    <span class="muted" title="Repository path">{{.Page.Path}}</span>
+  </div>
+</div>
+{{- end}}
