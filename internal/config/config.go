@@ -97,18 +97,18 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 	fs.Usage = func() {
 		fmt.Fprintf(output, "Usage: wiki [flags] [repository-path]\n\nFlags:\n")
 		fs.PrintDefaults()
-		fmt.Fprintf(output, "\nEvery flag has a WIKI_-prefixed environment variable equivalent,\n"+
-			"for example WIKI_ADDR or WIKI_RELOAD_INTERVAL.\n")
+		fmt.Fprintf(output, "\nEvery flag has a WACKY_-prefixed environment variable equivalent,\n"+
+			"for example WACKY_ADDR or WACKY_RELOAD_INTERVAL.\n")
 	}
 
 	var level string
-	fs.StringVar(&cfg.Addr, "addr", envString(getenv, "WIKI_ADDR", cfg.Addr), "address to listen on")
-	fs.StringVar(&cfg.RepoPath, "repo", envString(getenv, "WIKI_REPO", cfg.RepoPath), "path to the Git repository to serve")
-	fs.StringVar(&cfg.Ref, "ref", envString(getenv, "WIKI_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
-	fs.StringVar(&cfg.Title, "title", envString(getenv, "WIKI_TITLE", cfg.Title), "site title (default: repository directory name)")
-	fs.StringVar(&level, "log-level", envString(getenv, "WIKI_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
-	fs.Int64Var(&cfg.MaxFileSize, "max-file-size", envInt64(getenv, "WIKI_MAX_FILE_SIZE", cfg.MaxFileSize), "maximum size in bytes of a file served from the repository")
-	fs.IntVar(&cfg.HistoryLimit, "history-limit", int(envInt64(getenv, "WIKI_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
+	fs.StringVar(&cfg.Addr, "addr", envString(getenv, "WACKY_ADDR", cfg.Addr), "address to listen on")
+	fs.StringVar(&cfg.RepoPath, "repo", envString(getenv, "WACKY_REPO", cfg.RepoPath), "path to the Git repository to serve")
+	fs.StringVar(&cfg.Ref, "ref", envString(getenv, "WACKY_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
+	fs.StringVar(&cfg.Title, "title", envString(getenv, "WACKY_TITLE", cfg.Title), "site title (default: repository directory name)")
+	fs.StringVar(&level, "log-level", envString(getenv, "WACKY_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
+	fs.Int64Var(&cfg.MaxFileSize, "max-file-size", envInt64(getenv, "WACKY_MAX_FILE_SIZE", cfg.MaxFileSize), "maximum size in bytes of a file served from the repository")
+	fs.IntVar(&cfg.HistoryLimit, "history-limit", int(envInt64(getenv, "WACKY_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
 
 	durations := []struct {
 		p     *time.Duration
@@ -116,12 +116,12 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 		env   string
 		usage string
 	}{
-		{&cfg.ReloadInterval, "reload-interval", "WIKI_RELOAD_INTERVAL", "how often to rebuild the page index (0 disables)"},
-		{&cfg.ReadTimeout, "read-timeout", "WIKI_READ_TIMEOUT", "HTTP read timeout"},
-		{&cfg.WriteTimeout, "write-timeout", "WIKI_WRITE_TIMEOUT", "HTTP write timeout"},
-		{&cfg.IdleTimeout, "idle-timeout", "WIKI_IDLE_TIMEOUT", "HTTP idle timeout"},
-		{&cfg.ShutdownTimeout, "shutdown-timeout", "WIKI_SHUTDOWN_TIMEOUT", "how long to wait for in-flight requests on shutdown"},
-		{&cfg.GitTimeout, "git-timeout", "WIKI_GIT_TIMEOUT", "timeout for a single git invocation"},
+		{&cfg.ReloadInterval, "reload-interval", "WACKY_RELOAD_INTERVAL", "how often to rebuild the page index (0 disables)"},
+		{&cfg.ReadTimeout, "read-timeout", "WACKY_READ_TIMEOUT", "HTTP read timeout"},
+		{&cfg.WriteTimeout, "write-timeout", "WACKY_WRITE_TIMEOUT", "HTTP write timeout"},
+		{&cfg.IdleTimeout, "idle-timeout", "WACKY_IDLE_TIMEOUT", "HTTP idle timeout"},
+		{&cfg.ShutdownTimeout, "shutdown-timeout", "WACKY_SHUTDOWN_TIMEOUT", "how long to wait for in-flight requests on shutdown"},
+		{&cfg.GitTimeout, "git-timeout", "WACKY_GIT_TIMEOUT", "timeout for a single git invocation"},
 	}
 	for _, d := range durations {
 		def, err := envDuration(getenv, d.env, *d.p)

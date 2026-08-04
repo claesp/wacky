@@ -35,14 +35,14 @@ wiki [flags] [repository-path]
 
 | Flag | Environment | Default | Meaning |
 |------|-------------|---------|---------|
-| `-addr` | `WIKI_ADDR` | `127.0.0.1:8080` | Listen address |
-| `-repo` | `WIKI_REPO` | `.` | Repository (or sub-directory) to serve |
-| `-ref` | `WIKI_REF` | working tree | Serve a pinned branch, tag or commit |
-| `-title` | `WIKI_TITLE` | directory name | Site title |
-| `-reload-interval` | `WIKI_RELOAD_INTERVAL` | `15s` | Index rebuild period, `0` disables |
-| `-log-level` | `WIKI_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `-max-file-size` | `WIKI_MAX_FILE_SIZE` | `4194304` | Largest file that will be read |
-| `-history-limit` | `WIKI_HISTORY_LIMIT` | `30` | Commits shown in the history view |
+| `-addr` | `WACKY_ADDR` | `127.0.0.1:8080` | Listen address |
+| `-repo` | `WACKY_REPO` | `.` | Repository (or sub-directory) to serve |
+| `-ref` | `WACKY_REF` | working tree | Serve a pinned branch, tag or commit |
+| `-title` | `WACKY_TITLE` | directory name | Site title |
+| `-reload-interval` | `WACKY_RELOAD_INTERVAL` | `15s` | Index rebuild period, `0` disables |
+| `-log-level` | `WACKY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `-max-file-size` | `WACKY_MAX_FILE_SIZE` | `4194304` | Largest file that will be read |
+| `-history-limit` | `WACKY_HISTORY_LIMIT` | `30` | Commits shown in the history view |
 
 Timeouts (`-read-timeout`, `-write-timeout`, `-idle-timeout`,
 `-shutdown-timeout`, `-git-timeout`) follow the same flag/environment pattern.

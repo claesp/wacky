@@ -41,10 +41,10 @@ func TestLoadDefaults(t *testing.T) {
 func TestFlagsBeatEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	environment := env(map[string]string{
-		"WIKI_ADDR":            ":9999",
-		"WIKI_TITLE":           "From Env",
-		"WIKI_RELOAD_INTERVAL": "1m",
-		"WIKI_LOG_LEVEL":       "debug",
+		"WACKY_ADDR":            ":9999",
+		"WACKY_TITLE":           "From Env",
+		"WACKY_RELOAD_INTERVAL": "1m",
+		"WACKY_LOG_LEVEL":       "debug",
 	})
 
 	cfg, err := Load([]string{"-addr", ":7000", dir}, environment, io.Discard)
@@ -70,7 +70,7 @@ func TestFlagsBeatEnvironment(t *testing.T) {
 func TestLoadIsDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	args := []string{"-addr", ":8081", "-title", "Docs", dir}
-	environment := env(map[string]string{"WIKI_LOG_LEVEL": "warn"})
+	environment := env(map[string]string{"WACKY_LOG_LEVEL": "warn"})
 
 	first, err := Load(args, environment, io.Discard)
 	if err != nil {
@@ -105,7 +105,7 @@ func TestLoadRejectsBadInput(t *testing.T) {
 		{"empty address", []string{"-addr", "", dir}, nil},
 		{"negative reload interval", []string{"-reload-interval", "-5s", dir}, nil},
 		{"zero max file size", []string{"-max-file-size", "0", dir}, nil},
-		{"bad duration in environment", []string{dir}, map[string]string{"WIKI_READ_TIMEOUT": "soon"}},
+		{"bad duration in environment", []string{dir}, map[string]string{"WACKY_READ_TIMEOUT": "soon"}},
 		{"too many arguments", []string{dir, dir}, nil},
 	}
 
