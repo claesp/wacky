@@ -226,14 +226,22 @@ func TestSidebarNavigation(t *testing.T) {
 
 	body := get(t, srv, "/wiki/docs/setup").Body.String()
 	for _, want := range []string{
-		`<li><a href="/">Home</a></li>`,
-		`<li><a href="/pages">All pages</a></li>`,
+		`<li class="nav-top"><a href="/">Home</a></li>`,
+		`<li class="nav-bottom"><a href="/pages">All pages</a></li>`,
 		`<input class="menu-toggle visually-hidden" type="checkbox" id="menu-toggle">`,
 		`<label class="menu-button" for="menu-toggle">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page is missing %q", want)
 		}
+	}
+
+	// Home first, then the repository tree, then the page list.
+	home := strings.Index(body, `class="nav-top"`)
+	tree := strings.Index(body, `<span class="nav-dir">Docs</span>`)
+	pages := strings.Index(body, `class="nav-bottom"`)
+	if !(home < tree && tree < pages) {
+		t.Errorf("sidebar order is home=%d tree=%d pages=%d, want that order", home, tree, pages)
 	}
 	if strings.Contains(body, "<script") {
 		t.Error("the menu introduced a script tag, which the CSP forbids")

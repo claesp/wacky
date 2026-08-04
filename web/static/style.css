@@ -218,6 +218,24 @@ a:hover { text-decoration: underline; }
 .nav a.active { color: var(--accent); font-weight: 600; }
 .nav-dir { color: var(--fg-muted); font-weight: 600; }
 
+/* Rules that fence the repository tree off from the fixed entries. */
+.nav > .nav-top {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+.nav > .nav-bottom {
+  border-top: 1px solid var(--border);
+  padding-top: 0.45rem;
+  margin-top: 0.45rem;
+}
+/* With no pages between them, one rule is enough. */
+.nav > .nav-top + .nav-bottom {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
 /* Content ----------------------------------------------------------------- */
 
 main { min-width: 0; }
