@@ -9,7 +9,9 @@
   {{- end}}
   <li class="nav-bottom"><a href="/pages"{{if eq .Path "/pages"}} class="active" aria-current="page"{{end}}>All pages</a></li>
 </ul>
-{{- if not .Nav}}
+{{/* Keyed off the page count, not the tree: a repository whose only page is a
+     root README has an empty tree but is not empty. */}}
+{{- if eq .Stats.Pages 0}}
 <p class="muted">This repository contains no Markdown files.</p>
 {{- end -}}
 {{- end}}

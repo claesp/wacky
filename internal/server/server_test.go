@@ -308,6 +308,47 @@ func TestSidebarNavigation(t *testing.T) {
 	}
 }
 
+// The "no Markdown files" note belongs to a repository with no pages at all.
+// A root README leaves the navigation tree empty without leaving the wiki
+// empty, and must not trigger it.
+func TestEmptyNavigationNote(t *testing.T) {
+	const note = "This repository contains no Markdown files"
+
+	serve := func(t *testing.T, files map[string]string) *Server {
+		t.Helper()
+		log := slog.New(slog.NewTextHandler(io.Discard, nil))
+		store := wacky.NewStore(&fakeSource{files: files}, markdown.New(), log)
+		if err := store.Reload(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		srv, err := New(config.Default(), store, log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return srv
+	}
+
+	t.Run("only a root README", func(t *testing.T) {
+		body := get(t, serve(t, map[string]string{"README.md": "# Handbook\n"}), "/").Body.String()
+
+		if strings.Contains(body, note) {
+			t.Errorf("a repository with a page claims to have none:\n%s", body)
+		}
+		if !strings.Contains(body, "Handbook") {
+			t.Error("the page was not rendered")
+		}
+	})
+
+	t.Run("no Markdown at all", func(t *testing.T) {
+		// No home page, so "/" redirects to the page list.
+		body := get(t, serve(t, map[string]string{"LICENSE": "MIT"}), "/pages").Body.String()
+
+		if !strings.Contains(body, note) {
+			t.Errorf("an empty repository does not say so:\n%s", body)
+		}
+	})
+}
+
 // The current entry is marked for assistive technology, not just visually.
 func TestNavigationMarksCurrentPage(t *testing.T) {
 	tests := []struct {
