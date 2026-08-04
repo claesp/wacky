@@ -1,13 +1,14 @@
-{{/* Home, then the repository tree, then the page list, with a rule above and
-     below the tree. The dividers are borders on the two boundary items rather
-     than <hr> elements, which are not valid children of a list. */}}
+{{/* The fixed entries first, then the repository tree, with a rule between
+     them. The rule is a border on the last fixed item rather than an <hr>,
+     which is not a valid child of a list, and is left off entirely when there
+     is no tree below it to separate. */}}
 {{define "nav" -}}
 <ul class="nav">
-  <li class="nav-top"><a href="/"{{if eq .Path "/"}} class="active" aria-current="page"{{end}}>Home</a></li>
+  <li><a href="/"{{if eq .Path "/"}} class="active" aria-current="page"{{end}}>Home</a></li>
+  <li{{if .Nav}} class="nav-divide"{{end}}><a href="/pages"{{if eq .Path "/pages"}} class="active" aria-current="page"{{end}}>Pages</a></li>
   {{- range .Nav}}
   {{template "nav-node" dict "Node" . "Current" $.Slug}}
   {{- end}}
-  <li class="nav-bottom"><a href="/pages"{{if eq .Path "/pages"}} class="active" aria-current="page"{{end}}>All pages</a></li>
 </ul>
 {{/* Keyed off the page count, not the tree: a repository whose only page is a
      root README has an empty tree but is not empty. */}}

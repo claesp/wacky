@@ -225,9 +225,9 @@ func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, 
 // tree, so its trail is the one it would have if it sat directly below Home.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.write(w, r, http.StatusOK, "index.gohtml", indexView{
-		layout:      s.layout(r, "All pages", ""),
+		layout:      s.layout(r, "Pages", ""),
 		Pages:       s.store.Pages(),
-		Breadcrumbs: []wacky.Breadcrumb{{Name: "All pages", URL: "/pages"}},
+		Breadcrumbs: []wacky.Breadcrumb{{Name: "Pages", URL: "/pages"}},
 	})
 }
 

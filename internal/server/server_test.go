@@ -149,7 +149,7 @@ func TestRoutes(t *testing.T) {
 		{"home", "/", http.StatusOK, []string{"Handbook", `href="/wacky/docs/setup"`}},
 		{"page", "/wacky/docs/setup", http.StatusOK, []string{"<h1 id=\"setup\">Setup", "Run the installer"}},
 		{"nested page", "/wacky/guides/deep/adv", http.StatusOK, []string{"Advanced"}},
-		{"page list", "/pages", http.StatusOK, []string{"All pages", "docs/setup.md"}},
+		{"page list", "/pages", http.StatusOK, []string{"Pages", "docs/setup.md"}},
 		{"search hit", "/search?q=installer", http.StatusOK, []string{"<mark>installer</mark>", "Setup"}},
 		{"search miss", "/search?q=zzzznothing", http.StatusOK, []string{"Nothing matched"}},
 		{"history", "/history/docs/setup", http.StatusOK, []string{"write the docs", "Ada"}},
@@ -261,8 +261,8 @@ func TestSidebarNavigation(t *testing.T) {
 
 	body := get(t, srv, "/wacky/docs/setup").Body.String()
 	for _, want := range []string{
-		`<li class="nav-top"><a href="/">Home</a></li>`,
-		`<li class="nav-bottom"><a href="/pages">All pages</a></li>`,
+		`<li><a href="/">Home</a></li>`,
+		`<li class="nav-divide"><a href="/pages">Pages</a></li>`,
 		`<input class="menu-toggle visually-hidden" type="checkbox" id="menu-toggle">`,
 		`<label class="menu-button" for="menu-toggle">`,
 	} {
@@ -287,12 +287,12 @@ func TestSidebarNavigation(t *testing.T) {
 		t.Errorf("search form has %d inputs, want exactly 1 so Enter submits it:\n%s", n, headerHTML)
 	}
 
-	// Home first, then the repository tree, then the page list.
-	home := strings.Index(body, `class="nav-top"`)
+	// Home, then Pages, then the repository tree below the rule.
+	home := strings.Index(body, `>Home</a>`)
+	pages := strings.Index(body, `class="nav-divide"`)
 	tree := strings.Index(body, `<span class="nav-dir">Docs</span>`)
-	pages := strings.Index(body, `class="nav-bottom"`)
-	if !(home < tree && tree < pages) {
-		t.Errorf("sidebar order is home=%d tree=%d pages=%d, want that order", home, tree, pages)
+	if !(home < pages && pages < tree) {
+		t.Errorf("sidebar order is home=%d pages=%d tree=%d, want that order", home, pages, tree)
 	}
 	if strings.Contains(body, "<script") {
 		t.Error("the menu introduced a script tag, which the CSP forbids")
@@ -337,6 +337,10 @@ func TestEmptyNavigationNote(t *testing.T) {
 		if !strings.Contains(body, "Handbook") {
 			t.Error("the page was not rendered")
 		}
+		// With no tree below it, the rule under Pages would separate nothing.
+		if strings.Contains(body, "nav-divide") {
+			t.Errorf("the sidebar draws a rule with nothing below it:\n%s", body)
+		}
 	})
 
 	t.Run("no Markdown at all", func(t *testing.T) {
@@ -355,7 +359,7 @@ func TestNavigationMarksCurrentPage(t *testing.T) {
 		target, current string
 	}{
 		{"/", `<a href="/" class="active" aria-current="page">Home</a>`},
-		{"/pages", `<a href="/pages" class="active" aria-current="page">All pages</a>`},
+		{"/pages", `<a href="/pages" class="active" aria-current="page">Pages</a>`},
 	}
 	srv := newTestServer(t)
 	for _, tt := range tests {
@@ -391,7 +395,7 @@ func TestBreadcrumbsOnEveryPage(t *testing.T) {
 			target: "/pages",
 			want: []string{
 				`<a href="/">Home</a>`,
-				`<a href="/pages" aria-current="page">All pages</a>`,
+				`<a href="/pages" aria-current="page">Pages</a>`,
 			},
 		},
 		{
