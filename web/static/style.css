@@ -406,7 +406,7 @@ mark { background: var(--mark); color: inherit; padding: 0 0.15em; }
   gap: 0.35rem 0.6rem;
   min-width: 0;
 }
-.footer-right { justify-content: flex-end; }
+.footer-right { justify-content: flex-end; margin-left: auto; }
 
 .footer-left > * + *::before,
 .footer-right > * + *::before {
@@ -422,7 +422,34 @@ mark { background: var(--mark); color: inherit; padding: 0 0.15em; }
     padding: 1rem 1rem 2rem;
     gap: 0.5rem;
   }
-  .footer-right { justify-content: flex-start; }
+  .footer-right { justify-content: flex-start; margin-left: 0; }
 }
 
 .error h1 { font-size: 3.2rem; border: none; margin-bottom: 0.5rem; }
+
+@media (min-width: 80rem) {
+  .shell {
+    display: block;
+    max-width: 46rem;
+  }
+  .sidebar {
+    position: fixed;
+    top: calc(var(--topbar-height) + 1.75rem);
+    left: 1.25rem;
+    width: 14rem;
+    max-height: calc(100vh - var(--topbar-height) - 3.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .footer {
+    max-width: none;
+    margin-left: 17rem;
+    margin-right: 0;
+  }
+
+  .toc {
+    width: 15rem;
+    max-width: none;
+    margin: 0 -17rem 1.2rem 2rem;
+  }
+}
