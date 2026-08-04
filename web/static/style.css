@@ -231,7 +231,14 @@ main { min-width: 0; }
   gap: 0.35rem;
 }
 
-.page > :first-child { margin-top: 0; }
+/* The first block of a page starts flush with the top of the article. The
+   second selector covers the case where the floated table of contents is the
+   first child: the heading after it must be reset too, or its top margin
+   collapses through the article and pushes the whole page down. */
+.page > :first-child,
+.page > .toc + * {
+  margin-top: 0;
+}
 
 .page h1, .page h2, .page h3, .page h4, .page h5, .page h6 {
   line-height: 1.25;
