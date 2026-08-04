@@ -215,6 +215,34 @@ func (r *Repository) Head(ctx context.Context) (Commit, error) {
 	return commits[0], nil
 }
 
+// FirstCommit returns the oldest commit in the served revision: the root of
+// the history, or the earliest of them when the history has several roots. An
+// empty repository yields the zero Commit and no error.
+func (r *Repository) FirstCommit(ctx context.Context) (Commit, error) {
+	rev := r.ref
+	if rev == "" {
+		rev = "HEAD"
+	}
+
+	// --max-parents=0 selects root commits only, so this does not stream the
+	// whole history through the parser.
+	out, err := r.run(ctx, "log", "--max-parents=0", "--format="+logFormat(), rev)
+	if err != nil {
+		if _, verifyErr := r.run(ctx, "rev-parse", "--verify", "--quiet", rev); verifyErr != nil {
+			return Commit{}, nil
+		}
+		return Commit{}, fmt.Errorf("read first commit: %w", err)
+	}
+
+	var oldest Commit
+	for _, c := range parseCommits(out) {
+		if oldest.IsZero() || c.When.Before(oldest.When) {
+			oldest = c
+		}
+	}
+	return oldest, nil
+}
+
 // Files lists every file in the served revision. For the working tree that is
 // every tracked file plus untracked files that .gitignore does not exclude.
 func (r *Repository) Files(ctx context.Context) ([]File, error) {

@@ -63,6 +63,14 @@ func (f *fakeSource) Head(context.Context) (git.Commit, error) {
 	return git.Commit{Hash: "0123456789abcdef", Subject: "write the docs"}, nil
 }
 
+func (f *fakeSource) FirstCommit(context.Context) (git.Commit, error) {
+	return git.Commit{
+		Hash:    "fedcba9876543210",
+		Subject: "initial import",
+		When:    time.Date(2019, 5, 4, 3, 2, 1, 0, time.UTC),
+	}, nil
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 

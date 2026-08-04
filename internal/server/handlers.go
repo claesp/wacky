@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,8 @@ type layout struct {
 	Ref       string
 	Nav       []*wacky.Node
 	Stats     wacky.Stats
+	// Copyright is the footer notice, empty when no owner is configured.
+	Copyright string
 	// Path is the request path, used to mark the current navigation entry.
 	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
@@ -30,16 +33,37 @@ type layout struct {
 }
 
 func (s *Server) layout(r *http.Request, title, slug string) layout {
+	stats := s.store.Stats()
 	return layout{
 		Site:      s.cfg.Title,
 		PageTitle: title,
 		Slug:      slug,
 		Ref:       s.cfg.Ref,
 		Nav:       s.store.Tree().Children,
-		Stats:     s.store.Stats(),
+		Stats:     stats,
+		Copyright: copyrightNotice(s.cfg.Owner, stats.First.When.Year(), time.Now().Year()),
 		Path:      r.URL.Path,
 		Assets:    s.assets,
 	}
+}
+
+// copyrightNotice renders the footer notice from the owner and the span of
+// years the repository covers. Without an owner there is no notice.
+func copyrightNotice(owner string, firstYear, currentYear int) string {
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return ""
+	}
+	// A repository with no history has no first commit to date the notice by.
+	if firstYear <= 1 || firstYear > currentYear {
+		firstYear = currentYear
+	}
+
+	years := strconv.Itoa(firstYear)
+	if firstYear != currentYear {
+		years += "-" + strconv.Itoa(currentYear)
+	}
+	return "Copyright © " + owner + ", " + years
 }
 
 // pageView renders a single wiki page.

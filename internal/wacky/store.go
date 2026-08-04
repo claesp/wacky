@@ -30,6 +30,7 @@ type Source interface {
 	Read(ctx context.Context, rel string) ([]byte, error)
 	Log(ctx context.Context, rel string, limit int) ([]git.Commit, error)
 	Head(ctx context.Context) (git.Commit, error)
+	FirstCommit(ctx context.Context) (git.Commit, error)
 }
 
 // Store holds the page index built from a repository.
@@ -59,6 +60,7 @@ type snapshot struct {
 	tree     *Node
 	home     *Page
 	head     git.Commit
+	first    git.Commit
 	loadedAt time.Time
 
 	mu       sync.Mutex
@@ -101,6 +103,18 @@ func (s *Store) Reload(ctx context.Context) error {
 	next := emptySnapshot()
 	next.head = head
 	next.loadedAt = time.Now()
+
+	// The first commit cannot change while the process runs, so it is fetched
+	// once and carried forward across reloads.
+	next.first = s.current().first
+	if next.first.IsZero() {
+		first, err := s.src.FirstCommit(ctx)
+		if err != nil {
+			s.log.Warn("could not read the first commit", "error", err)
+		} else {
+			next.first = first
+		}
+	}
 
 	for _, f := range files {
 		next.files[f.Path] = f
@@ -186,9 +200,12 @@ func (s *Store) Watch(ctx context.Context, interval time.Duration) {
 
 // Stats describes the current index.
 type Stats struct {
-	Pages    int
-	Files    int
-	Head     git.Commit
+	Pages int
+	Files int
+	Head  git.Commit
+	// First is the oldest commit in the served revision. It is the zero
+	// Commit in a repository without history.
+	First    git.Commit
 	Ref      string
 	Root     string
 	LoadedAt time.Time
@@ -201,6 +218,7 @@ func (s *Store) Stats() Stats {
 		Pages:    len(snap.byPath),
 		Files:    len(snap.files),
 		Head:     snap.head,
+		First:    snap.first,
 		Ref:      s.src.Ref(),
 		Root:     s.src.Root(),
 		LoadedAt: snap.loadedAt,

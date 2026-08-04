@@ -36,6 +36,42 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LogLevel != slog.LevelInfo {
 		t.Errorf("LogLevel = %v, want info", cfg.LogLevel)
 	}
+	if cfg.Owner != DefaultOwner {
+		t.Errorf("Owner = %q, want %q", cfg.Owner, DefaultOwner)
+	}
+}
+
+// An owner that is unset, blank or whitespace falls back to the default; a
+// real one is kept and trimmed.
+func TestOwnerDefaults(t *testing.T) {
+	dir := t.TempDir()
+
+	tests := []struct {
+		name string
+		args []string
+		env  map[string]string
+		want string
+	}{
+		{"unset", []string{dir}, nil, DefaultOwner},
+		{"blank flag", []string{"-owner", "", dir}, nil, DefaultOwner},
+		{"whitespace flag", []string{"-owner", "   ", dir}, nil, DefaultOwner},
+		{"blank environment", []string{dir}, map[string]string{"WACKY_OWNER": ""}, DefaultOwner},
+		{"flag wins", []string{"-owner", "Acme Ltd", dir}, map[string]string{"WACKY_OWNER": "Env"}, "Acme Ltd"},
+		{"from environment", []string{dir}, map[string]string{"WACKY_OWNER": "Env Owner"}, "Env Owner"},
+		{"trimmed", []string{"-owner", "  Ada  ", dir}, nil, "Ada"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(tt.args, env(tt.env), io.Discard)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Owner != tt.want {
+				t.Errorf("Owner = %q, want %q", cfg.Owner, tt.want)
+			}
+		})
+	}
 }
 
 func TestFlagsBeatEnvironment(t *testing.T) {

@@ -129,6 +129,36 @@ func TestReadAndLog(t *testing.T) {
 	}
 }
 
+// The copyright notice is dated by the repository's first commit.
+func TestFirstCommit(t *testing.T) {
+	ctx := context.Background()
+	dir := newTestRepo(t)
+
+	writeFile(t, dir, "later.md", "# Later\n")
+	gitCmd(t, dir, "add", "later.md")
+	gitCmd(t, dir, "commit", "-m", "second commit")
+
+	repo := mustOpen(t, dir)
+	first, err := repo.FirstCommit(ctx)
+	if err != nil {
+		t.Fatalf("FirstCommit: %v", err)
+	}
+	if first.Subject != "initial commit" {
+		t.Errorf("FirstCommit = %q, want the root commit", first.Subject)
+	}
+	if first.When.IsZero() {
+		t.Error("first commit has no date to take a year from")
+	}
+
+	head, err := repo.Head(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Hash == head.Hash {
+		t.Error("FirstCommit returned the tip of the branch")
+	}
+}
+
 func TestReadRejectsTraversal(t *testing.T) {
 	ctx := context.Background()
 	repo := mustOpen(t, newTestRepo(t))
