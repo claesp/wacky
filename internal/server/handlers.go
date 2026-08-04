@@ -219,19 +219,33 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 // handleHistory shows the commits that touched a file.
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	slug := strings.Trim(path.Clean("/"+r.PathValue("path")), "/")
-	if slug == "" || slug == "." {
+	target := strings.Trim(path.Clean("/"+r.PathValue("path")), "/")
+	if target == "" || target == "." {
 		s.renderError(w, r, http.StatusNotFound, "No file was given.")
 		return
 	}
 
-	repoPath := slug
-	page, isPage := s.store.Page(slug)
-	if isPage {
+	// History is addressed by source file, which is what the page templates
+	// link to. A page slug is still accepted, so older links keep working.
+	page, isPage := s.store.PageByPath(target)
+	if !isPage {
+		page, isPage = s.store.Page(target)
+	}
+
+	repoPath := target
+	switch {
+	case isPage:
 		repoPath = page.Path
-	} else if !s.store.HasFile(slug) {
-		s.renderError(w, r, http.StatusNotFound, "There is no file at "+slug+".")
+	case !s.store.HasFile(target):
+		s.renderError(w, r, http.StatusNotFound, "There is no file at "+target+".")
 		return
+	}
+
+	// Breadcrumbs follow the page's own slug; a file that is not a page falls
+	// back to its path.
+	crumbPath := target
+	if isPage {
+		crumbPath = page.Slug
 	}
 
 	ctx, cancel := s.timeoutFor(r)
@@ -244,11 +258,11 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.write(w, r, http.StatusOK, "history.gohtml", historyView{
-		layout:      s.layout(r, "History of "+path.Base(repoPath), slug),
+		layout:      s.layout(r, "History of "+path.Base(repoPath), crumbPath),
 		RepoPath:    repoPath,
 		Page:        page,
 		Commits:     commits,
-		Breadcrumbs: s.store.Breadcrumbs(slug),
+		Breadcrumbs: s.store.Breadcrumbs(crumbPath),
 	})
 }
 

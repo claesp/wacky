@@ -437,6 +437,72 @@ func TestHistoryShowsRepositoryPath(t *testing.T) {
 	}
 }
 
+// A history link names the source file, so the home page — whose slug is empty
+// — links to its own file rather than to a bare "/history/".
+func TestHistoryLinksNameTheSourceFile(t *testing.T) {
+	srv := newTestServer(t)
+
+	tests := []struct{ page, wantLink string }{
+		{"/", `<a href="/history/README.md">History</a>`},
+		{"/wiki/docs/setup", `<a href="/history/docs/setup.md">History</a>`},
+	}
+	for _, tt := range tests {
+		body := get(t, srv, tt.page).Body.String()
+		if !strings.Contains(body, tt.wantLink) {
+			t.Errorf("GET %s does not link to %s", tt.page, tt.wantLink)
+		}
+	}
+}
+
+// Following the home page's history link shows the index file's commits.
+func TestHomePageHistory(t *testing.T) {
+	rec := get(t, newTestServer(t), "/history/README.md")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /history/README.md = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"<code>README.md</code>",
+		"write the docs", // the commit subject from the fake source
+		`<a href="/">back to the page</a>`,
+		// Breadcrumbs follow the page's slug, not the file name, and the
+		// history view is not itself one of its crumbs.
+		`<a href="/">Home</a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("GET /history/README.md is missing %q", want)
+		}
+	}
+}
+
+// A history URL with no file names nothing to show. ("/history/." never
+// reaches the handler: the mux normalises the path and redirects first.)
+func TestHistoryWithoutAFile(t *testing.T) {
+	rec := get(t, newTestServer(t), "/history/")
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /history/ = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "No file was given") {
+		t.Errorf("GET /history/: unexpected message:\n%s", rec.Body.String())
+	}
+}
+
+// Slug-form history URLs predate the file-form ones and must keep working.
+func TestHistoryAcceptsSlugForm(t *testing.T) {
+	srv := newTestServer(t)
+
+	fromSlug := get(t, srv, "/history/docs/setup")
+	fromPath := get(t, srv, "/history/docs/setup.md")
+	if fromSlug.Code != http.StatusOK || fromPath.Code != http.StatusOK {
+		t.Fatalf("slug form = %d, file form = %d, want 200 for both", fromSlug.Code, fromPath.Code)
+	}
+	if fromSlug.Body.String() != fromPath.Body.String() {
+		t.Error("the slug and file forms of a history URL render differently")
+	}
+}
+
 // A stylesheet fix must reach a browser that already cached the old one, so
 // the link carries a content version and only versioned URLs cache forever.
 func TestStylesheetIsVersioned(t *testing.T) {
