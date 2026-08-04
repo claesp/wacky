@@ -14,7 +14,7 @@
       <tbody>
         {{- range .Commits}}
         <tr>
-          <td><code>{{.Short}}</code></td>
+          <td>{{template "commit" dict "URL" $.CommitURL "Commit" .}}</td>
           <td>{{formatTime .When}}</td>
           <td>{{.Author}}</td>
           <td>{{.Subject}}</td>
@@ -28,5 +28,5 @@
   {{end}}
 </article>
 
-{{template "page-meta" dict "Path" .RepoPath "Commit" .LastCommit "HasHistory" .HasHistory}}
+{{template "page-meta" dict "Path" .RepoPath "Commit" .LastCommit "HasHistory" .HasHistory "CommitURL" .CommitURL}}
 {{- end}}

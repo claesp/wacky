@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -49,6 +50,9 @@ type Config struct {
 	// Owner names the copyright holder in the site footer. Empty means no
 	// copyright notice is shown.
 	Owner string
+	// CommitURL is the base URL a commit hash is appended to, for example
+	// "https://github.com/org/repo/commit/". Empty leaves hashes unlinked.
+	CommitURL string
 	// ReloadInterval controls how often the page index is rebuilt from the
 	// repository. Zero disables background reloading.
 	ReloadInterval time.Duration
@@ -112,6 +116,8 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 	fs.StringVar(&cfg.Ref, "ref", envString(getenv, "WACKY_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
 	fs.StringVar(&cfg.Title, "title", envString(getenv, "WACKY_TITLE", cfg.Title), "site title (default: repository directory name)")
 	fs.StringVar(&cfg.Owner, "owner", envString(getenv, "WACKY_OWNER", cfg.Owner), "copyright holder shown in the footer")
+	fs.StringVar(&cfg.CommitURL, "commit-url", envString(getenv, "WACKY_COMMIT_URL", cfg.CommitURL),
+		"base URL a commit hash is appended to, e.g. https://github.com/org/repo/commit/ (default: hashes are not linked)")
 	fs.StringVar(&level, "log-level", envString(getenv, "WACKY_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
 	fs.Int64Var(&cfg.MaxFileSize, "max-file-size", envInt64(getenv, "WACKY_MAX_FILE_SIZE", cfg.MaxFileSize), "maximum size in bytes of a file served from the repository")
 	fs.IntVar(&cfg.HistoryLimit, "history-limit", int(envInt64(getenv, "WACKY_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
@@ -186,6 +192,9 @@ func (c *Config) normalize() error {
 	if c.Owner = strings.TrimSpace(c.Owner); c.Owner == "" {
 		c.Owner = DefaultOwner
 	}
+	if err := c.normalizeCommitURL(); err != nil {
+		return err
+	}
 	if c.MaxFileSize <= 0 {
 		return fmt.Errorf("max-file-size must be positive, got %d", c.MaxFileSize)
 	}
@@ -200,6 +209,34 @@ func (c *Config) normalize() error {
 	}
 	if c.GitTimeout <= 0 {
 		return fmt.Errorf("git-timeout must be positive, got %s", c.GitTimeout)
+	}
+	return nil
+}
+
+// normalizeCommitURL validates the commit base URL and makes sure a hash can
+// simply be appended to it.
+func (c *Config) normalizeCommitURL() error {
+	c.CommitURL = strings.TrimSpace(c.CommitURL)
+	if c.CommitURL == "" {
+		return nil
+	}
+
+	u, err := url.Parse(c.CommitURL)
+	if err != nil {
+		return fmt.Errorf("parse commit-url %q: %w", c.CommitURL, err)
+	}
+	// A bad scheme here would end up in an href, so it is refused at start-up
+	// rather than rendered into every page.
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("commit-url %q must be an http or https URL", c.CommitURL)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("commit-url %q has no host", c.CommitURL)
+	}
+
+	// "…/commit" needs a separator before the hash; "…?id=" already ends in one.
+	if !strings.HasSuffix(c.CommitURL, "/") && !strings.HasSuffix(c.CommitURL, "=") {
+		c.CommitURL += "/"
 	}
 	return nil
 }

@@ -40,6 +40,7 @@ wacky [flags] [repository-path]
 | `-ref` | `WACKY_REF` | working tree | Serve a pinned branch, tag or commit |
 | `-title` | `WACKY_TITLE` | directory name | Site title |
 | `-owner` | `WACKY_OWNER` | `The Authors` | Copyright holder in the footer |
+| `-commit-url` | `WACKY_COMMIT_URL` | none | Base URL a commit hash is appended to, e.g. `https://github.com/org/repo/commit/` |
 | `-reload-interval` | `WACKY_RELOAD_INTERVAL` | `15s` | Index rebuild period, `0` disables |
 | `-log-level` | `WACKY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `-max-file-size` | `WACKY_MAX_FILE_SIZE` | `4194304` | Largest file that will be read |

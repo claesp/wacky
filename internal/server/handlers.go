@@ -26,6 +26,8 @@ type layout struct {
 	Stats     wacky.Stats
 	// Copyright is the footer notice, empty when no owner is configured.
 	Copyright string
+	// CommitURL is the base URL commit hashes link to, empty when unset.
+	CommitURL string
 	// Path is the request path, used to mark the current navigation entry.
 	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
@@ -42,6 +44,7 @@ func (s *Server) layout(r *http.Request, title, slug string) layout {
 		Nav:       s.store.Tree().Children,
 		Stats:     stats,
 		Copyright: copyrightNotice(s.cfg.Owner, stats.First.When.Year(), time.Now().Year()),
+		CommitURL: s.cfg.CommitURL,
 		Path:      r.URL.Path,
 		Assets:    s.assets,
 	}

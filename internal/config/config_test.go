@@ -41,6 +41,57 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+// A commit hash is appended to the base URL, so it must end in a separator,
+// and it must never be able to carry a dangerous scheme into an href.
+func TestCommitURL(t *testing.T) {
+	dir := t.TempDir()
+
+	valid := []struct{ in, want string }{
+		{"", ""},
+		{"https://github.com/org/repo/commit/", "https://github.com/org/repo/commit/"},
+		{"https://gitlab.com/group/proj/-/commit/", "https://gitlab.com/group/proj/-/commit/"},
+		// A missing trailing separator is added rather than silently producing
+		// URLs like ".../commitabc123".
+		{"https://github.com/org/repo/commit", "https://github.com/org/repo/commit/"},
+		// A query-style base already ends in its separator.
+		{"https://git.example.org/repo/commit/?id=", "https://git.example.org/repo/commit/?id="},
+		{"  https://example.com/c/  ", "https://example.com/c/"},
+		{"http://internal.example/c/", "http://internal.example/c/"},
+	}
+	for _, tt := range valid {
+		cfg, err := Load([]string{"-commit-url", tt.in, dir}, env(nil), io.Discard)
+		if err != nil {
+			t.Errorf("Load(-commit-url %q): %v", tt.in, err)
+			continue
+		}
+		if cfg.CommitURL != tt.want {
+			t.Errorf("CommitURL for %q = %q, want %q", tt.in, cfg.CommitURL, tt.want)
+		}
+	}
+
+	invalid := []string{
+		"javascript:alert(1)",
+		"data:text/html,<script>alert(1)</script>",
+		"ftp://example.com/commit/",
+		"/just/a/path/",
+		"https:///no-host/",
+	}
+	for _, in := range invalid {
+		if cfg, err := Load([]string{"-commit-url", in, dir}, env(nil), io.Discard); err == nil {
+			t.Errorf("Load(-commit-url %q) succeeded with %q, want an error", in, cfg.CommitURL)
+		}
+	}
+
+	// The environment supplies it just like every other setting.
+	cfg, err := Load([]string{dir}, env(map[string]string{"WACKY_COMMIT_URL": "https://example.com/c/"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CommitURL != "https://example.com/c/" {
+		t.Errorf("CommitURL from the environment = %q", cfg.CommitURL)
+	}
+}
+
 // An owner that is unset, blank or whitespace falls back to the default; a
 // real one is kept and trimmed.
 func TestOwnerDefaults(t *testing.T) {
