@@ -1,5 +1,4 @@
 # Compiled binaries
-cmd/wiki/wiki
 /wiki
 /wacky
 *.exe
@@ -11,3 +10,6 @@ coverage.*
 
 # macOS
 .DS_Store
+
+# Claude
+.claude/
