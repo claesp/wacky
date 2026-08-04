@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -63,18 +64,22 @@ type dirView struct {
 
 type indexView struct {
 	layout
-	Pages []*wiki.Page
+	Pages       []*wiki.Page
+	Breadcrumbs []wiki.Breadcrumb
 }
 
 type searchView struct {
 	layout
-	Results []wiki.Result
-	Total   int
+	Results     []wiki.Result
+	Total       int
+	Breadcrumbs []wiki.Breadcrumb
 }
 
 type historyView struct {
 	layout
-	Path        string
+	// RepoPath is the file the history belongs to. It is deliberately not
+	// called Path, which would shadow layout.Path in templates.
+	RepoPath    string
 	Page        *wiki.Page
 	Commits     []git.Commit
 	Breadcrumbs []wiki.Breadcrumb
@@ -180,11 +185,13 @@ func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, 
 	})
 }
 
-// handleIndex lists every page in the wiki.
+// handleIndex lists every page in the wiki. It has no place in the repository
+// tree, so its trail is the one it would have if it sat directly below Home.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.write(w, r, http.StatusOK, "index.gohtml", indexView{
-		layout: s.layout(r, "All pages", ""),
-		Pages:  s.store.Pages(),
+		layout:      s.layout(r, "All pages", ""),
+		Pages:       s.store.Pages(),
+		Breadcrumbs: []wiki.Breadcrumb{{Name: "All pages", URL: "/pages"}},
 	})
 }
 
@@ -193,10 +200,18 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	results := s.store.Search(query, 50)
 
+	// The crumb carries the query, so following it repeats the search rather
+	// than landing on an empty form.
+	crumb := wiki.Breadcrumb{Name: "Search", URL: "/search"}
+	if query != "" {
+		crumb.URL += "?q=" + url.QueryEscape(query)
+	}
+
 	view := searchView{
-		layout:  s.layout(r, "Search", ""),
-		Results: results,
-		Total:   len(results),
+		layout:      s.layout(r, "Search", ""),
+		Results:     results,
+		Total:       len(results),
+		Breadcrumbs: []wiki.Breadcrumb{crumb},
 	}
 	view.Query = query
 	s.write(w, r, http.StatusOK, "search.gohtml", view)
@@ -230,7 +245,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 	s.write(w, r, http.StatusOK, "history.gohtml", historyView{
 		layout:      s.layout(r, "History of "+path.Base(repoPath), slug),
-		Path:        repoPath,
+		RepoPath:    repoPath,
 		Page:        page,
 		Commits:     commits,
 		Breadcrumbs: s.store.Breadcrumbs(slug),

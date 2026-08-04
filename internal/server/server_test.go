@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -267,6 +269,147 @@ func TestNavigationMarksCurrentPage(t *testing.T) {
 	body := get(t, srv, "/wiki/docs/setup").Body.String()
 	if strings.Contains(body, `<a href="/" class="active"`) {
 		t.Error("Home is marked current while a wiki page is shown")
+	}
+}
+
+// Every page starts its trail with Home, including Home itself and the page
+// list, which has no place in the repository tree.
+func TestBreadcrumbsOnEveryPage(t *testing.T) {
+	srv := newTestServer(t)
+
+	tests := []struct {
+		name, target string
+		want         []string
+	}{
+		{
+			name:   "home points at itself",
+			target: "/",
+			want:   []string{`<a href="/" aria-current="page">Home</a>`},
+		},
+		{
+			name:   "page list sits below home",
+			target: "/pages",
+			want: []string{
+				`<a href="/">Home</a>`,
+				`<a href="/pages" aria-current="page">All pages</a>`,
+			},
+		},
+		{
+			name:   "search results sit below home and repeat the query",
+			target: "/search?q=installer",
+			want: []string{
+				`<a href="/">Home</a>`,
+				`<a href="/search?q=installer" aria-current="page">Search</a>`,
+			},
+		},
+		{
+			name:   "search without a query keeps a bare crumb",
+			target: "/search",
+			want:   []string{`<a href="/search" aria-current="page">Search</a>`},
+		},
+		{
+			name:   "wiki page marks its last crumb",
+			target: "/wiki/docs/setup",
+			want: []string{
+				`<a href="/">Home</a>`,
+				`<a href="/wiki/docs">Docs</a>`,
+				`<a href="/wiki/docs/setup" aria-current="page">Setup</a>`,
+			},
+		},
+		{
+			name:   "directory listing",
+			target: "/wiki/guides",
+			want:   []string{`<a href="/">Home</a>`, `<a href="/wiki/guides" aria-current="page">`},
+		},
+		{
+			name:   "history is not one of its own crumbs",
+			target: "/history/docs/setup",
+			want:   []string{`<a href="/">Home</a>`, `<a href="/wiki/docs/setup">Setup</a>`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := get(t, srv, tt.target).Body.String()
+			if !strings.Contains(body, `<nav class="breadcrumbs" aria-label="Breadcrumb">`) {
+				t.Fatalf("GET %s has no breadcrumb trail", tt.target)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(body, want) {
+					t.Errorf("GET %s: trail missing %q", tt.target, want)
+				}
+			}
+			if n := strings.Count(body, `aria-current="page"`); n > 2 {
+				t.Errorf("GET %s marks %d elements as current, want at most 2 (nav entry + crumb)", tt.target, n)
+			}
+		})
+	}
+}
+
+// Following the search crumb must reproduce the same results, which means the
+// query has to survive escaping intact.
+func TestSearchCrumbRepeatsTheQuery(t *testing.T) {
+	srv := newTestServer(t)
+
+	queries := []string{"installer", "run the installer", "a&b", "100% sure", "a+b", "<script>"}
+	for _, query := range queries {
+		target := "/search?q=" + url.QueryEscape(query)
+		body := get(t, srv, target).Body.String()
+
+		href := crumbHref(t, body, "Search")
+		if href == "" {
+			t.Errorf("q=%q: no search crumb", query)
+			continue
+		}
+		// The crumb is a link a browser will follow, so parse it the way one
+		// would and check the query survived the round trip.
+		parsed, err := url.Parse(html.UnescapeString(href))
+		if err != nil {
+			t.Errorf("q=%q: crumb href %q does not parse: %v", query, href, err)
+			continue
+		}
+		if got := parsed.Query().Get("q"); got != query {
+			t.Errorf("crumb href %q carries q=%q, want %q", href, got, query)
+			continue
+		}
+		// And following it returns the same page.
+		if repeat := get(t, srv, parsed.String()).Body.String(); repeat != body {
+			t.Errorf("q=%q: following the crumb produced a different page", query)
+		}
+	}
+}
+
+// crumbHref extracts the href of the breadcrumb whose label is name.
+func crumbHref(t *testing.T, body, name string) string {
+	t.Helper()
+	nav := body[strings.Index(body, `<nav class="breadcrumbs"`):]
+	nav = nav[:strings.Index(nav, "</nav>")]
+
+	marker := `>` + name + `</a>`
+	end := strings.Index(nav, marker)
+	if end < 0 {
+		return ""
+	}
+	tag := nav[:end]
+	open := strings.LastIndex(tag, `<a href="`)
+	if open < 0 {
+		return ""
+	}
+	tag = tag[open+len(`<a href="`):]
+	quote := strings.IndexByte(tag, '"')
+	if quote < 0 {
+		return ""
+	}
+	return tag[:quote]
+}
+
+// The history view has its own repository path, which must not be mistaken for
+// the request path the breadcrumb trail compares against.
+func TestHistoryShowsRepositoryPath(t *testing.T) {
+	body := get(t, newTestServer(t), "/history/docs/setup").Body.String()
+
+	if !strings.Contains(body, "<code>docs/setup.md</code>") {
+		t.Error("history view does not show the repository path")
 	}
 }
 

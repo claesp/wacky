@@ -1,5 +1,5 @@
 {{define "content" -}}
-{{template "breadcrumbs" .Breadcrumbs}}
+{{template "breadcrumbs" dict "Trail" .Breadcrumbs "Path" .Path}}
 
 <article class="page">
   <h1>{{.Dir}}</h1>

@@ -30,16 +30,18 @@
 </li>
 {{- end}}
 
+{{/* Takes a dict of "Trail" (the crumbs below Home) and "Path" (the current
+     request path). The Home crumb is always rendered, so every page starts its
+     trail the same way, including Home itself. */}}
 {{define "breadcrumbs" -}}
-{{- if . -}}
+{{- $path := .Path -}}
 <nav class="breadcrumbs" aria-label="Breadcrumb">
-  <a href="/">Home</a>
-  {{- range .}}
+  <a href="/"{{if eq $path "/"}} aria-current="page"{{end}}>Home</a>
+  {{- range .Trail}}
   <span aria-hidden="true">/</span>
-  <a href="{{.URL}}">{{.Name}}</a>
+  <a href="{{.URL}}"{{if eq $path (urlPath .URL)}} aria-current="page"{{end}}>{{.Name}}</a>
   {{- end}}
 </nav>
-{{- end -}}
 {{- end}}
 
 {{define "toc" -}}

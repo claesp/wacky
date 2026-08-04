@@ -79,6 +79,16 @@ var funcs = template.FuncMap{
 	"pathExt":   path.Ext,
 	"lower":     strings.ToLower,
 	"dict":      dict,
+	"urlPath":   urlPath,
+}
+
+// urlPath drops the query string, so a link that carries one can still be
+// compared against the request path.
+func urlPath(u string) string {
+	if i := strings.IndexAny(u, "?#"); i >= 0 {
+		return u[:i]
+	}
+	return u
 }
 
 // dict builds a map from alternating key/value arguments, which is how nested

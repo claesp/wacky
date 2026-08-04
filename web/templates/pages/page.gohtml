@@ -1,5 +1,5 @@
 {{define "content" -}}
-{{template "breadcrumbs" .Breadcrumbs}}
+{{template "breadcrumbs" dict "Trail" .Breadcrumbs "Path" .Path}}
 
 <article class="page">
   {{template "toc" .Doc.TOC}}
