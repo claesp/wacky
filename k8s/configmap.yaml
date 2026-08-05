@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wacky
+  labels:
+    app.kubernetes.io/name: wacky
+data:
+  # --- content -----------------------------------------------------------
+  # git-sync reads its whole configuration from GITSYNC_-prefixed variables.
+  # GITSYNC_ROOT and GITSYNC_LINK are set on the containers instead, because
+  # the volume layout is a property of the Pod rather than of the content.
+  GITSYNC_REPO: https://github.com/kubernetes/git-sync.git
+  GITSYNC_REF: master
+  GITSYNC_DEPTH: "1"
+  # How often git-sync asks the remote for new commits.
+  GITSYNC_PERIOD: 60s
+
+  # --- wacky -------------------------------------------------------------
+  # Every wacky setting is a WACKY_-prefixed variable. WACKY_ADDR is set in the
+  # image and WACKY_GIT_REPO on the container, since both describe the Pod.
+  WACKY_BRAND_TITLE: Wacky
+  WACKY_BRAND_COLOR: "#1f5fa8"
+  WACKY_OWNER: The Authors
+  WACKY_LOG_LEVEL: info
+
+  # How often wacky re-indexes what git-sync has published. There is no point
+  # setting this far below GITSYNC_PERIOD: it would just re-read unchanged
+  # files.
+  WACKY_RELOAD_INTERVAL: 60s
+
+  # Uncomment to link commit hashes to a hosting site, or to enable the
+  # classification banners. See docs/deployment.md.
+  # WACKY_GIT_COMMIT_URL: https://github.com/kubernetes/git-sync/commit/
+  # WACKY_CLASSIFICATION_THRESHOLD_LOW: "2"
+  # WACKY_CLASSIFICATION_THRESHOLD_HIGH: "5"

@@ -18,6 +18,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	// The timezone database is embedded so that TZ works on an image that
+	// carries no files of its own — a scratch image has no /usr/share/zoneinfo,
+	// and neither does Alpine unless the tzdata package is installed.
+	_ "time/tzdata"
+
 	"github.com/claesp/wacky/internal/config"
 	"github.com/claesp/wacky/internal/git"
 	"github.com/claesp/wacky/internal/markdown"
@@ -44,6 +49,11 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 			return nil
 		}
 		return err
+	}
+
+	// Probing a running server is a separate job from being one.
+	if cfg.HealthCheck {
+		return healthCheck(ctx, cfg)
 	}
 
 	log := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))

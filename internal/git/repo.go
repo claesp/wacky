@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -59,6 +60,19 @@ type File struct {
 	ModTime time.Time
 }
 
+// layout is where the repository sits on disk once symlinks have been
+// resolved. It is immutable: Refresh builds a new one and swaps it in, so a
+// command that is already running keeps using a consistent set of paths.
+type layout struct {
+	// root is the repository top level, where git commands are run.
+	root string
+	// prefix is the served directory relative to root, or "" for the whole
+	// repository.
+	prefix string
+	// base is the absolute path of the served directory.
+	base string
+}
+
 // Repository is a read-only handle on a Git repository. It is safe for
 // concurrent use.
 //
@@ -67,13 +81,10 @@ type File struct {
 // relative to it, and files outside it are invisible.
 type Repository struct {
 	bin string
-	// root is the repository top level, where git commands are run.
-	root string
-	// prefix is the served directory relative to root, or "" for the whole
-	// repository.
-	prefix string
-	// base is the absolute path of the served directory.
-	base    string
+	// dir is the path as configured, before symlink resolution. Resolution is
+	// deliberately not cached here: see Refresh.
+	dir     string
+	layout  atomic.Pointer[layout]
 	ref     string
 	timeout time.Duration
 	maxSize int64
@@ -118,14 +129,9 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Repository, error) 
 		return nil, fmt.Errorf("resolve %q: %w", dir, err)
 	}
 
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
-	}
-
 	r := &Repository{
 		bin:     bin,
-		root:    abs,
-		base:    abs,
+		dir:     abs,
 		timeout: 20 * time.Second,
 		maxSize: 4 << 20,
 	}
@@ -133,27 +139,8 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Repository, error) 
 		opt(r)
 	}
 
-	out, err := r.run(ctx, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return nil, fmt.Errorf("%q is not inside a Git repository: %w", abs, err)
-	}
-	root := strings.TrimSpace(out)
-	if root == "" {
-		return nil, fmt.Errorf("%q is not inside a Git repository", abs)
-	}
-	// Resolve symlinks once so path containment checks compare like with like.
-	if real, err := filepath.EvalSymlinks(root); err == nil {
-		root = real
-	}
-	r.root = root
-	r.base = abs
-
-	// A directory below the top level narrows the wiki to that sub-tree.
-	if rel, err := filepath.Rel(root, abs); err == nil && rel != "." {
-		if strings.HasPrefix(rel, "..") {
-			return nil, fmt.Errorf("%q is outside repository %q", abs, root)
-		}
-		r.prefix = filepath.ToSlash(rel)
+	if err := r.Refresh(ctx); err != nil {
+		return nil, err
 	}
 
 	if r.ref != "" {
@@ -164,28 +151,77 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Repository, error) 
 	return r, nil
 }
 
+// Refresh re-reads where the repository is on disk.
+//
+// The resolved location is not fixed for the lifetime of the process. A
+// content syncer such as git-sync publishes an update by checking it out into
+// a new directory, pointing a symlink at it and deleting the old one; the same
+// swap backs a Kubernetes ConfigMap mount. Resolving once at Open would leave
+// every later git command addressing a directory that no longer exists, so
+// callers re-resolve before each pass over the repository.
+func (r *Repository) Refresh(ctx context.Context) error {
+	l, err := r.locate(ctx)
+	if err != nil {
+		return err
+	}
+	r.layout.Store(l)
+	return nil
+}
+
+// locate resolves the configured directory and works out which part of the
+// repository it selects.
+func (r *Repository) locate(ctx context.Context) (*layout, error) {
+	abs := r.dir
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+
+	out, err := r.runIn(ctx, abs, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return nil, fmt.Errorf("%q is not inside a Git repository: %w", abs, err)
+	}
+	root := strings.TrimSpace(out)
+	if root == "" {
+		return nil, fmt.Errorf("%q is not inside a Git repository", abs)
+	}
+	// Resolve symlinks on both ends so containment checks compare like with like.
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+
+	l := &layout{root: root, base: abs}
+	// A directory below the top level narrows the wiki to that sub-tree.
+	if rel, err := filepath.Rel(root, abs); err == nil && rel != "." {
+		if strings.HasPrefix(rel, "..") {
+			return nil, fmt.Errorf("%q is outside repository %q", abs, root)
+		}
+		l.prefix = filepath.ToSlash(rel)
+	}
+	return l, nil
+}
+
 // Root returns the absolute path of the served directory.
-func (r *Repository) Root() string { return r.base }
+func (r *Repository) Root() string { return r.layout.Load().base }
 
 // Prefix returns the served directory relative to the repository top level, or
 // an empty string when the whole repository is served.
-func (r *Repository) Prefix() string { return r.prefix }
+func (r *Repository) Prefix() string { return r.layout.Load().prefix }
 
 // repoPath maps a path relative to the served directory onto one relative to
 // the repository top level, which is what git commands expect.
-func (r *Repository) repoPath(rel string) string {
-	if r.prefix == "" {
+func (l *layout) repoPath(rel string) string {
+	if l.prefix == "" {
 		return rel
 	}
-	return path.Join(r.prefix, rel)
+	return path.Join(l.prefix, rel)
 }
 
 // pathspec limits a git command to the served directory.
-func (r *Repository) pathspec() []string {
-	if r.prefix == "" {
+func (l *layout) pathspec() []string {
+	if l.prefix == "" {
 		return nil
 	}
-	return []string{"--", r.prefix}
+	return []string{"--", l.prefix}
 }
 
 // Ref returns the pinned revision, or an empty string when the working tree is
@@ -199,7 +235,7 @@ func (r *Repository) Head(ctx context.Context) (Commit, error) {
 	if rev == "" {
 		rev = "HEAD"
 	}
-	args := append([]string{"log", "-1", "--format=" + logFormat(), rev}, r.pathspec()...)
+	args := append([]string{"log", "-1", "--format=" + logFormat(), rev}, r.layout.Load().pathspec()...)
 	out, err := r.run(ctx, args...)
 	if err != nil {
 		// A repository without commits is a valid, if empty, wiki.
@@ -246,13 +282,17 @@ func (r *Repository) FirstCommit(ctx context.Context) (Commit, error) {
 // Files lists every file in the served revision. For the working tree that is
 // every tracked file plus untracked files that .gitignore does not exclude.
 func (r *Repository) Files(ctx context.Context) ([]File, error) {
+	// One layout for the whole listing: the paths below have to agree with the
+	// directory the listing command ran in, even if a syncer swaps it midway.
+	l := r.layout.Load()
+
 	var args []string
 	if r.ref == "" {
 		args = []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard"}
 	} else {
 		args = []string{"ls-tree", "-r", "-z", "--name-only", r.ref}
 	}
-	out, err := r.run(ctx, append(args, r.pathspec()...)...)
+	out, err := r.runIn(ctx, l.root, append(args, l.pathspec()...)...)
 	if err != nil {
 		return nil, fmt.Errorf("list files: %w", err)
 	}
@@ -268,11 +308,11 @@ func (r *Repository) Files(ctx context.Context) ([]File, error) {
 		if name == "." || strings.HasPrefix(name, "../") || strings.HasPrefix(name, ".git/") {
 			continue
 		}
-		if r.prefix != "" {
-			if !strings.HasPrefix(name, r.prefix+"/") {
+		if l.prefix != "" {
+			if !strings.HasPrefix(name, l.prefix+"/") {
 				continue
 			}
-			name = name[len(r.prefix)+1:]
+			name = name[len(l.prefix)+1:]
 		}
 		if _, dup := seen[name]; dup {
 			continue
@@ -283,7 +323,7 @@ func (r *Repository) Files(ctx context.Context) ([]File, error) {
 		if r.ref == "" {
 			// Stat is cheap and gives the sidebar useful timestamps. A file
 			// that vanished between ls-files and Stat is simply skipped.
-			info, statErr := os.Stat(filepath.Join(r.base, filepath.FromSlash(name)))
+			info, statErr := os.Stat(filepath.Join(l.base, filepath.FromSlash(name)))
 			if statErr != nil || info.IsDir() {
 				continue
 			}
@@ -301,9 +341,10 @@ func (r *Repository) Read(ctx context.Context, rel string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	l := r.layout.Load()
 
 	if r.ref != "" {
-		out, err := r.runRaw(ctx, "show", r.ref+":"+r.repoPath(clean))
+		out, err := r.runRawIn(ctx, l.root, "show", r.ref+":"+l.repoPath(clean))
 		if err != nil {
 			return nil, fmt.Errorf("read %q: %w", clean, ErrNotFound)
 		}
@@ -313,7 +354,7 @@ func (r *Repository) Read(ctx context.Context, rel string) ([]byte, error) {
 		return out, nil
 	}
 
-	full, err := r.resolve(clean)
+	full, err := l.resolve(clean)
 	if err != nil {
 		return nil, err
 	}
@@ -349,8 +390,9 @@ func (r *Repository) Log(ctx context.Context, rel string, limit int) ([]Commit, 
 		rev = "HEAD"
 	}
 
-	out, err := r.run(ctx,
-		"log", "--max-count="+strconv.Itoa(limit), "--format="+logFormat(), rev, "--", r.repoPath(clean))
+	l := r.layout.Load()
+	out, err := r.runIn(ctx, l.root,
+		"log", "--max-count="+strconv.Itoa(limit), "--format="+logFormat(), rev, "--", l.repoPath(clean))
 	if err != nil {
 		return nil, nil
 	}
@@ -359,29 +401,33 @@ func (r *Repository) Log(ctx context.Context, rel string, limit int) ([]Commit, 
 
 // resolve converts a path relative to the served directory into an absolute
 // one, refusing anything that escapes it, even through symlinks.
-func (r *Repository) resolve(clean string) (string, error) {
-	full := filepath.Join(r.base, filepath.FromSlash(clean))
+func (l *layout) resolve(clean string) (string, error) {
+	full := filepath.Join(l.base, filepath.FromSlash(clean))
 	real, err := filepath.EvalSymlinks(full)
 	if err != nil {
 		return "", fmt.Errorf("resolve %q: %w", clean, ErrNotFound)
 	}
-	if real != r.base && !strings.HasPrefix(real, r.base+string(filepath.Separator)) {
+	if real != l.base && !strings.HasPrefix(real, l.base+string(filepath.Separator)) {
 		return "", fmt.Errorf("resolve %q: %w", clean, ErrOutsideRepo)
 	}
 	return real, nil
 }
 
-// run executes git and returns its standard output as a string.
+// run executes git in the repository top level and returns standard output.
 func (r *Repository) run(ctx context.Context, args ...string) (string, error) {
-	out, err := r.runRaw(ctx, args...)
+	return r.runIn(ctx, r.layout.Load().root, args...)
+}
+
+func (r *Repository) runIn(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := r.runRawIn(ctx, dir, args...)
 	return string(out), err
 }
 
-func (r *Repository) runRaw(ctx context.Context, args ...string) ([]byte, error) {
+func (r *Repository) runRawIn(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	full := append([]string{"-C", r.root, "--no-pager"}, args...)
+	full := append([]string{"-C", dir, "--no-pager"}, args...)
 	cmd := exec.CommandContext(ctx, r.bin, full...)
 	// A predictable environment keeps output parseable regardless of the
 	// user's global git configuration.

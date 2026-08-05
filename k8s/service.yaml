@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: wacky
+  labels:
+    app.kubernetes.io/name: wacky
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wacky
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

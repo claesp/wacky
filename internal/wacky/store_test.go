@@ -23,6 +23,9 @@ type fakeSource struct {
 func (f *fakeSource) Root() string { return "/fake/repo" }
 func (f *fakeSource) Ref() string  { return "" }
 
+// The fake never moves, so there is nothing to re-resolve.
+func (f *fakeSource) Refresh(context.Context) error { return nil }
+
 func (f *fakeSource) Files(context.Context) ([]git.File, error) {
 	paths := make([]string, 0, len(f.files))
 	for p := range f.files {

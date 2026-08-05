@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# Applied to metadata only. Selectors are deliberately left alone: they are
+# immutable on an existing Deployment, so a label added there later would make
+# every subsequent apply fail.
+labels:
+  - pairs:
+      app.kubernetes.io/component: wiki
+    includeSelectors: false
+
+# Pin the image here rather than editing the Deployment. Prefer a digest to a
+# tag in production: a tag can be moved underneath a running rollout.
+images:
+  - name: ghcr.io/claesp/wacky
+    newTag: latest
+
+# wacky reads its configuration once, at start-up, so editing the ConfigMap
+# does not by itself reach a running replica:
+#
+#   kubectl rollout restart deployment/wacky

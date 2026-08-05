@@ -27,6 +27,39 @@ only file you need to deploy:
 go build -o wacky ./cmd/wacky
 ```
 
+### Container
+
+```bash
+docker build -t wacky .
+docker run --rm -p 8080:8080 -v ~/notes:/repo:ro wacky
+```
+
+The runtime image is `scratch` — 13 MB, holding the static binary, the `git`
+binary and the three shared objects git links against. There is no shell, no
+package manager and no libc beyond git's own. wacky has to run `git` to read a
+repository, so a truly empty image is impossible, but nothing else is carried:
+templates, stylesheet, Markdown renderer and timezone database are all compiled
+into the binary.
+
+Every setting works there, including `-git-ref`, sub-directory serving,
+classification, the generated brand stylesheet and gzip responses.
+
+The mounted repository can be read-only; the server never writes to it.
+`WACKY_ADDR` defaults to `0.0.0.0:8080` inside the image, since the usual
+loopback default would be unreachable from outside the container. Flags are
+appended to the entrypoint, so `docker run … wacky -git-ref v1.0` works, and
+every `WACKY_` variable can be passed with `-e`.
+
+The image has no shell or HTTP client to run a health check with, so the binary
+probes itself: `wacky -health-check` performs a `GET /healthz` against its own
+configured address and exits `0` or `1`. That is what the image's `HEALTHCHECK`
+runs. Under Kubernetes, prefer an `httpGet` probe — the kubelet performs it from
+outside, costing the container nothing.
+
+Kubernetes manifests are in [`k8s/`](k8s), and
+[docs/deployment.md](docs/deployment.md) covers both the image and the cluster
+deployment in full.
+
 ## Usage
 
 ```
@@ -48,6 +81,7 @@ wacky [flags] [repository-path]
 | `-classification-threshold-high` | `WACKY_CLASSIFICATION_THRESHOLD_HIGH` | unset | `classification_level` at which that notice becomes severe |
 | `-reload-interval` | `WACKY_RELOAD_INTERVAL` | `15s` | Index rebuild period, `0` disables |
 | `-log-level` | `WACKY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `-health-check` | `WACKY_HEALTH_CHECK` | `false` | Probe `/healthz` on `-addr` and exit, instead of serving |
 | `-max-file-size` | `WACKY_MAX_FILE_SIZE` | `4194304` | Largest file that will be read |
 | `-git-history-limit` | `WACKY_GIT_HISTORY_LIMIT` | `30` | Commits shown in the history view |
 
@@ -112,6 +146,7 @@ serves `docs/` as the site root, and the rest of the repository stays invisible.
 │   ├── wacky/           # domain: pages, slugs, navigation tree, search
 │   └── server/          # routing, handlers, middleware, template set
 ├── docs/                # this project's documentation (and demo content)
+├── k8s/                 # Kubernetes manifests: config, deployment, service
 └── web/
     ├── templates/       # layout, partials and one template per page type
     └── static/          # stylesheet

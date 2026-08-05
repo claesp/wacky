@@ -27,6 +27,9 @@ var ErrNotFound = errors.New("wacky: page not found")
 type Source interface {
 	Root() string
 	Ref() string
+	// Refresh re-reads where the repository is, for sources that can move
+	// between reloads.
+	Refresh(ctx context.Context) error
 	Files(ctx context.Context) ([]git.File, error)
 	Read(ctx context.Context, rel string) ([]byte, error)
 	Log(ctx context.Context, rel string, limit int) ([]git.Commit, error)
@@ -93,6 +96,12 @@ func emptySnapshot() *snapshot {
 
 // Reload rebuilds the page index from the repository.
 func (s *Store) Reload(ctx context.Context) error {
+	// A syncer may have replaced the working tree since the last pass, so the
+	// source re-resolves before anything is read through it.
+	if err := s.src.Refresh(ctx); err != nil {
+		return fmt.Errorf("locate repository: %w", err)
+	}
+
 	files, err := s.src.Files(ctx)
 	if err != nil {
 		return fmt.Errorf("list repository: %w", err)

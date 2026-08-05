@@ -87,6 +87,11 @@ type Config struct {
 	HistoryLimit int
 
 	LogLevel slog.Level
+
+	// HealthCheck asks the process to probe a running server and exit, rather
+	// than start one. It exists so an image with no shell can still declare a
+	// container health check.
+	HealthCheck bool
 }
 
 // Default returns the configuration used when neither flags nor environment
@@ -150,6 +155,8 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 	fs.StringVar(&cfg.Owner, "owner", envString(getenv, "WACKY_OWNER", cfg.Owner), "copyright holder shown in the footer")
 	fs.StringVar(&cfg.CommitURL, "git-commit-url", envString(getenv, "WACKY_GIT_COMMIT_URL", cfg.CommitURL),
 		"base URL a commit hash is appended to, e.g. https://github.com/org/repo/commit/ (default: hashes are not linked)")
+	fs.BoolVar(&cfg.HealthCheck, "health-check", envBool(getenv, "WACKY_HEALTH_CHECK", false),
+		"probe a running server's /healthz at -addr and exit; 0 when it is serving")
 	fs.StringVar(&level, "log-level", envString(getenv, "WACKY_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
 	fs.Int64Var(&cfg.MaxFileSize, "max-file-size", envInt64(getenv, "WACKY_MAX_FILE_SIZE", cfg.MaxFileSize), "maximum size in bytes of a file served from the repository")
 	fs.IntVar(&cfg.HistoryLimit, "git-history-limit", int(envInt64(getenv, "WACKY_GIT_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
@@ -436,6 +443,18 @@ func envString(getenv func(string) string, key, def string) string {
 		return v
 	}
 	return def
+}
+
+func envBool(getenv func(string) string, key string, def bool) bool {
+	v := strings.TrimSpace(getenv(key))
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
 }
 
 func envInt64(getenv func(string) string, key string, def int64) int64 {

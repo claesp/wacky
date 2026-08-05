@@ -1,0 +1,18 @@
+# The build needs the module and its sources, nothing else.
+.git
+.gitignore
+.claude
+.dockerignore
+Dockerfile
+README.md
+docs/
+
+# Compiled binaries and test output
+/wacky
+cmd/wacky/wacky
+*.exe
+*.out
+*.test
+coverage.*
+
+.DS_Store

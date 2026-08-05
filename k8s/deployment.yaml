@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wacky
+  labels:
+    app.kubernetes.io/name: wacky
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wacky
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wacky
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # The clone is written by one container and read by another, so the
+        # volume has to be group-owned by the id they share.
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      volumes:
+        # Each replica keeps its own clone: no shared storage, and a Pod that
+        # is rescheduled starts from a clean checkout.
+        - name: repo
+          emptyDir: {}
+        # Both images run with a read-only root filesystem, and git needs
+        # somewhere to write.
+        - name: tmp
+          emptyDir: {}
+
+      initContainers:
+        # Clone before wacky starts, so it never indexes an empty directory.
+        # --one-time makes this exit rather than stay running.
+        - name: git-sync-init
+          image: registry.k8s.io/git-sync/git-sync:v4.4.0
+          envFrom:
+            - configMapRef:
+                name: wacky
+          env:
+            - { name: GITSYNC_ROOT, value: /repo }
+            - { name: GITSYNC_LINK, value: current }
+            - { name: GITSYNC_ONE_TIME, value: "true" }
+            # git writes its configuration under HOME, which is not writable here.
+            - { name: HOME, value: /tmp }
+          volumeMounts:
+            - { name: repo, mountPath: /repo }
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+
+      containers:
+        # Keeps the clone current. Each sync checks the new commit out into a
+        # fresh directory and repoints the "current" symlink at it; wacky
+        # re-resolves that symlink on every reload, so published changes appear
+        # without restarting anything.
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.4.0
+          envFrom:
+            - configMapRef:
+                name: wacky
+          env:
+            - { name: GITSYNC_ROOT, value: /repo }
+            - { name: GITSYNC_LINK, value: current }
+            - { name: HOME, value: /tmp }
+          volumeMounts:
+            - { name: repo, mountPath: /repo }
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 256Mi }
+
+        - name: wacky
+          image: ghcr.io/claesp/wacky:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: wacky
+          env:
+            # The symlink git-sync maintains, not the directory behind it.
+            - { name: WACKY_GIT_REPO, value: /repo/current }
+          volumeMounts:
+            # wacky only ever reads, so it need not hold the volume writable.
+            - { name: repo, mountPath: /repo, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+
+          # The kubelet performs these itself, so nothing has to run inside the
+          # container. The image also declares a HEALTHCHECK for plain Docker
+          # and Podman; under Kubernetes these take its place.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 15
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 30
+            timeoutSeconds: 5
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 512Mi }
+
+      # wacky stops accepting connections on SIGTERM and finishes the requests
+      # already in flight, which its own shutdown timeout bounds well inside this.
+      terminationGracePeriodSeconds: 30

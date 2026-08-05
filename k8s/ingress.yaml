@@ -1,0 +1,28 @@
+# Optional: delete this file if the Service is reached some other way.
+#
+# The host and the ingressClassName are the two fields that always need
+# changing; the TLS block assumes cert-manager and can be dropped.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wacky
+  labels:
+    app.kubernetes.io/name: wacky
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [wiki.example.com]
+      secretName: wacky-tls
+  rules:
+    - host: wiki.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wacky
+                port:
+                  name: http

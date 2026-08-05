@@ -243,3 +243,76 @@ func mustOpen(t *testing.T, dir string, opts ...Option) *Repository {
 	}
 	return repo
 }
+
+// A content syncer publishes an update by checking it out into a new directory,
+// pointing a symlink at it and removing the old one. A Repository opened
+// through that symlink has to follow the move rather than keep addressing the
+// directory that has been deleted underneath it.
+func TestRefreshFollowsSwappedSymlink(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	ctx := context.Background()
+
+	root := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	link := filepath.Join(root, "current")
+
+	first := newTestRepo(t)
+	if err := os.Symlink(first, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	repo, err := Open(ctx, link)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := repo.Files(ctx); err != nil {
+		t.Fatalf("Files before the swap: %v", err)
+	}
+
+	// The replacement carries a file the original does not.
+	second := newTestRepo(t)
+	writeFile(t, second, "published.md", "# Published\n")
+	gitCmd(t, second, "add", "published.md")
+	gitCmd(t, second, "commit", "-m", "publish")
+
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(second, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(first); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Refresh(ctx); err != nil {
+		t.Fatalf("Refresh after the swap: %v", err)
+	}
+	if got := repo.Root(); got != second {
+		t.Errorf("Root() = %q, want the new directory %q", got, second)
+	}
+
+	files, err := repo.Files(ctx)
+	if err != nil {
+		t.Fatalf("Files after the swap: %v", err)
+	}
+	var found bool
+	for _, f := range files {
+		if f.Path == "published.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Files() = %v, want the file added in the new directory", files)
+	}
+
+	if data, err := repo.Read(ctx, "published.md"); err != nil {
+		t.Errorf("Read after the swap: %v", err)
+	} else if !strings.Contains(string(data), "Published") {
+		t.Errorf("Read = %q, want the new content", data)
+	}
+}
