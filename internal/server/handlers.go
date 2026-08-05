@@ -283,7 +283,7 @@ func (s *Server) renderDir(w http.ResponseWriter, r *http.Request, slug string, 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	s.write(w, r, http.StatusOK, "index.gohtml", indexView{
 		layout:      s.layout(r, "Pages", ""),
-		Pages:       s.store.Pages(),
+		Pages:       s.store.PagesByModified(),
 		Breadcrumbs: []wacky.Breadcrumb{{Name: "Pages", URL: "/pages"}},
 	})
 }

@@ -31,11 +31,13 @@ func (f *fakeSource) Files(context.Context) ([]git.File, error) {
 	sort.Strings(paths)
 
 	files := make([]git.File, 0, len(paths))
-	for _, p := range paths {
+	// Each file is a minute newer than the one before, so ordering by time is
+	// distinguishable from ordering by path.
+	for i, p := range paths {
 		files = append(files, git.File{
 			Path:    p,
 			Size:    int64(len(f.files[p])),
-			ModTime: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+			ModTime: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Add(time.Duration(i) * time.Minute),
 		})
 	}
 	return files, nil
@@ -216,6 +218,70 @@ func TestRenderIsCachedPerSnapshot(t *testing.T) {
 	}
 	if first.HTML != second.HTML {
 		t.Error("repeated renders of the same page differ")
+	}
+}
+
+// The page list is ordered newest first, without disturbing the path order
+// the navigation tree relies on.
+func TestPagesByModified(t *testing.T) {
+	store := newTestStore(t, defaultFiles())
+
+	byPath := store.Pages()
+	byTime := store.PagesByModified()
+
+	if len(byTime) != len(byPath) {
+		t.Fatalf("PagesByModified has %d pages, Pages has %d", len(byTime), len(byPath))
+	}
+	for i := 1; i < len(byTime); i++ {
+		if byTime[i-1].ModTime.Before(byTime[i].ModTime) {
+			t.Errorf("page %d (%s) is older than the one after it (%s)",
+				i-1, byTime[i-1].ModTime, byTime[i].ModTime)
+		}
+	}
+
+	// The fake source dates each file a minute after the previous one in path
+	// order, so the newest is the last path.
+	if got, want := byTime[0].Path, byPath[len(byPath)-1].Path; got != want {
+		t.Errorf("newest page = %q, want %q", got, want)
+	}
+
+	// Sorting must not have reordered the shared path-ordered slice.
+	for i := 1; i < len(byPath); i++ {
+		if byPath[i-1].Path > byPath[i].Path {
+			t.Fatalf("Pages() is no longer in path order: %q before %q", byPath[i-1].Path, byPath[i].Path)
+		}
+	}
+}
+
+// untimedSource is a repository whose files carry no modification time, which
+// is what a pinned revision looks like: a commit has no per-file mtime.
+type untimedSource struct{ *fakeSource }
+
+func (u untimedSource) Files(ctx context.Context) ([]git.File, error) {
+	files, err := u.fakeSource.Files(ctx)
+	for i := range files {
+		files[i].ModTime = time.Time{}
+	}
+	return files, err
+}
+
+// Without timestamps every page ties, so the order has to stay stable rather
+// than arbitrary.
+func TestPagesByModifiedWithoutTimestamps(t *testing.T) {
+	src := untimedSource{&fakeSource{files: map[string]string{
+		"a.md": "# A\n", "b.md": "# B\n", "c.md": "# C\n",
+	}}}
+	store := NewStore(src, markdown.New(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := store.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	var order []string
+	for _, p := range store.PagesByModified() {
+		order = append(order, p.Path)
+	}
+	if !reflect.DeepEqual(order, []string{"a.md", "b.md", "c.md"}) {
+		t.Errorf("order = %v, want path order", order)
 	}
 }
 

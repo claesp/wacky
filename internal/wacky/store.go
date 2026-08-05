@@ -57,6 +57,7 @@ type snapshot struct {
 	source map[string][]byte // repository path -> raw Markdown
 
 	sorted   []*Page
+	byTime   []*Page
 	tree     *Node
 	home     *Page
 	head     git.Commit
@@ -161,6 +162,7 @@ func (s *Store) Reload(ctx context.Context) error {
 	}
 
 	next.sorted = sortedPages(next.byPath)
+	next.byTime = pagesByModified(next.sorted)
 	next.tree = buildTree(next.sorted)
 	next.home = pickHome(next.pages)
 
@@ -263,6 +265,9 @@ func (s *Store) Home() (*Page, bool) {
 
 // Pages returns every page, ordered by path.
 func (s *Store) Pages() []*Page { return s.current().sorted }
+
+// PagesByModified returns every page, most recently changed first.
+func (s *Store) PagesByModified() []*Page { return s.current().byTime }
 
 // Tree returns the directory tree of pages for navigation.
 func (s *Store) Tree() *Node { return s.current().tree }
@@ -430,6 +435,19 @@ func normalizeSlug(s string) string {
 		return ""
 	}
 	return path.Clean(s)
+}
+
+// pagesByModified copies the page list into modification order, newest first.
+// Pages sharing a timestamp — which is every page when a revision is pinned,
+// since a commit has no per-file mtime — keep their path order.
+func pagesByModified(pages []*Page) []*Page {
+	out := make([]*Page, len(pages))
+	copy(out, pages)
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].ModTime.After(out[j].ModTime)
+	})
+	return out
 }
 
 func sortedPages(byPath map[string]*Page) []*Page {

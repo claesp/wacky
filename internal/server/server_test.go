@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -39,11 +40,13 @@ func (f *fakeSource) Files(context.Context) ([]git.File, error) {
 	sort.Strings(paths)
 
 	out := make([]git.File, 0, len(paths))
-	for _, p := range paths {
+	// Each file is a minute newer than the one before, so ordering by time is
+	// distinguishable from ordering by path.
+	for i, p := range paths {
 		out = append(out, git.File{
 			Path:    p,
 			Size:    int64(len(f.files[p])),
-			ModTime: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC),
+			ModTime: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC).Add(time.Duration(i) * time.Minute),
 		})
 	}
 	return out, nil
@@ -244,6 +247,42 @@ func TestRoutes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The page list is Title / Path / Modified, newest first, with the relative
+// times used everywhere else on the site.
+func TestPageListTable(t *testing.T) {
+	body := get(t, newTestServer(t), "/pages").Body.String()
+
+	if !strings.Contains(body, "<tr><th>Title</th><th>Path</th><th>Modified</th></tr>") {
+		t.Errorf("unexpected table header:\n%s", body)
+	}
+	for _, gone := range []string{"<th>Size</th>", "Markdown files in"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("the page list still shows %q", gone)
+		}
+	}
+	if !strings.Contains(body, " ago</td>") {
+		t.Errorf("Modified is not a relative time:\n%s", body)
+	}
+	// The exact time stays on hover.
+	if !strings.Contains(body, `<td title="20`) {
+		t.Errorf("Modified lost its exact timestamp:\n%s", body)
+	}
+
+	// The fake source dates each file a minute after the previous one in path
+	// order, so the last path must be listed first.
+	rows := strings.Split(body, "<tr>")
+	var order []string
+	for _, row := range rows {
+		if i := strings.Index(row, "<code>"); i >= 0 {
+			order = append(order, row[i+len("<code>"):i+len("<code>")+strings.Index(row[i+len("<code>"):], "</code>")])
+		}
+	}
+	want := []string{"guides/deep/adv.md", "docs/setup.md", "README.md"}
+	if !reflect.DeepEqual(order, want) {
+		t.Errorf("row order = %v, want %v", order, want)
 	}
 }
 
