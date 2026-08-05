@@ -158,13 +158,13 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
 }
 .classification.unrated { background: #e6e6e2; color: #3f4247; }
 .classification.low { background: #f6e6a8; color: #4a3a00; }
-.classification.high { background: #b35309; color: #fff6ee; }
+.classification.high { background: #c8102e; color: #fff; }
 
 @media (prefers-color-scheme: dark) {
   .classification { border-bottom-color: rgba(255, 255, 255, 0.14); }
   .classification.unrated { background: #33353a; color: #d6d8dc; }
   .classification.low { background: #6b5a11; color: #f7ecc2; }
-  .classification.high { background: #8f4207; color: #fff2e6; }
+  .classification.high { background: #a20d26; color: #ffe9ec; }
 }
 
 .shell {
