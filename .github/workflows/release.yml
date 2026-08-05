@@ -97,6 +97,16 @@ jobs:
           pkg="${version#v}"
           pkg="$(printf '%s' "$pkg" | tr '-' '~')"
 
+          # Both formats require a version starting with a digit. Before the
+          # first tag exists, git describe --always yields a bare commit hash,
+          # which dpkg-deb rejects outright. Anchoring those builds at 0.0.0
+          # keeps them buildable and keeps them sorting below any real
+          # release, so an untagged package can never look newer than one.
+          case "$pkg" in
+            [0-9]*) ;;
+            *) pkg="0.0.0~${pkg}" ;;
+          esac
+
           # Stamp the commit's own timestamp rather than the wall clock, so
           # rebuilding a tag produces identical binaries.
           epoch="$(git log -1 --format=%ct)"
