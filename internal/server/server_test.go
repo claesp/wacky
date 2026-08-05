@@ -116,7 +116,7 @@ func newTestServer(t *testing.T) *Server {
 	}
 
 	cfg := config.Default()
-	cfg.Title = "Test Wiki"
+	cfg.BrandTitle = "Test Wiki"
 	cfg.RepoPath = "/fake/repo"
 
 	srv, err := New(cfg, store, log)
@@ -124,6 +124,57 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatalf("New: %v", err)
 	}
 	return srv
+}
+
+// The header shows a logo when one is configured, and the title text when not.
+func TestBrandHeader(t *testing.T) {
+	const png = "data:image/png;base64,iVBORw0KGgo="
+
+	t.Run("title text by default", func(t *testing.T) {
+		body := get(t, newTestServer(t), "/").Body.String()
+
+		if !strings.Contains(body, `<a class="brand" href="/">Test Wiki</a>`) {
+			t.Errorf("header does not show the title text:\n%s", header(t, body))
+		}
+	})
+
+	t.Run("an image replaces the text", func(t *testing.T) {
+		srv := newTestServer(t)
+		srv.cfg.BrandImageURL = "/static/logo.png"
+
+		head := header(t, get(t, srv, "/").Body.String())
+		if !strings.Contains(head, `<img src="/static/logo.png" alt="Test Wiki">`) {
+			t.Errorf("header does not show the logo:\n%s", head)
+		}
+		// The title survives as the alt text, not as visible text.
+		if strings.Contains(head, `href="/">Test Wiki`) {
+			t.Errorf("the title text is still rendered alongside the logo:\n%s", head)
+		}
+	})
+
+	t.Run("inline data wins over a URL", func(t *testing.T) {
+		srv := newTestServer(t)
+		srv.cfg.BrandImageURL = "/static/logo.png"
+		srv.cfg.BrandImageData = png
+
+		head := header(t, get(t, srv, "/").Body.String())
+		if !strings.Contains(head, `src="`+png+`"`) {
+			t.Errorf("header does not use the inline image:\n%s", head)
+		}
+		if strings.Contains(head, "/static/logo.png") {
+			t.Errorf("header still references the URL:\n%s", head)
+		}
+	})
+}
+
+// header returns the page's <header> element.
+func header(t *testing.T, body string) string {
+	t.Helper()
+	start := strings.Index(body, "<header")
+	if start < 0 {
+		t.Fatal("no header in the page")
+	}
+	return body[start : start+strings.Index(body[start:], "</header>")]
 }
 
 // newTestServerWithBrand builds a server whose assets were generated from the

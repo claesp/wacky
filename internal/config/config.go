@@ -7,11 +7,13 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -47,10 +49,17 @@ type Config struct {
 	// Ref pins the wiki to a Git revision (branch, tag or commit). When empty
 	// the working tree is served.
 	Ref string
-	// Title is the site name shown in the header and page titles.
-	Title string
+	// BrandTitle is the site name shown in the header and page titles.
+	BrandTitle string
 	// BrandColor is the "#rrggbb" the header gradient is built from.
 	BrandColor string
+	// BrandImageURL replaces the header text with an image. It must be
+	// relative or https, because the Content-Security-Policy allows nothing
+	// else.
+	BrandImageURL string
+	// BrandImageData is a canonical "data:image/...;base64,..." URI. It wins
+	// over BrandImageURL when both are set.
+	BrandImageData string
 	// Owner names the copyright holder in the site footer. Empty means no
 	// copyright notice is shown.
 	Owner string
@@ -88,7 +97,7 @@ func Default() Config {
 		Addr:            DefaultAddr,
 		RepoPath:        DefaultRepoPath,
 		Owner:           DefaultOwner,
-		Title:           DefaultTitle,
+		BrandTitle:      DefaultTitle,
 		BrandColor:      DefaultBrandColor,
 		ReloadInterval:  DefaultReloadInterval,
 		ReadTimeout:     DefaultReadTimeout,
@@ -129,17 +138,21 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 		envString(getenv, "WACKY_CLASSIFICATION_THRESHOLD_HIGH", ""),
 		"classification_level at which that notice becomes a severe one (unset: no notice)")
 	fs.StringVar(&cfg.Addr, "addr", envString(getenv, "WACKY_ADDR", cfg.Addr), "address to listen on")
-	fs.StringVar(&cfg.RepoPath, "repo", envString(getenv, "WACKY_REPO", cfg.RepoPath), "path to the Git repository to serve")
-	fs.StringVar(&cfg.Ref, "ref", envString(getenv, "WACKY_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
-	fs.StringVar(&cfg.Title, "title", envString(getenv, "WACKY_TITLE", cfg.Title), "site title")
+	fs.StringVar(&cfg.RepoPath, "git-repo", envString(getenv, "WACKY_GIT_REPO", cfg.RepoPath), "path to the Git repository to serve")
+	fs.StringVar(&cfg.Ref, "git-ref", envString(getenv, "WACKY_GIT_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
+	fs.StringVar(&cfg.BrandTitle, "brand-title", envString(getenv, "WACKY_BRAND_TITLE", cfg.BrandTitle), "site title")
 	fs.StringVar(&cfg.BrandColor, "brand-color", envString(getenv, "WACKY_BRAND_COLOR", cfg.BrandColor),
 		"header colour as an RGB hex string, e.g. #1f5fa8")
+	fs.StringVar(&cfg.BrandImageURL, "brand-image-url", envString(getenv, "WACKY_BRAND_IMAGE_URL", ""),
+		"header logo, as a relative or https URL (replaces the title text)")
+	fs.StringVar(&cfg.BrandImageData, "brand-image-data", envString(getenv, "WACKY_BRAND_IMAGE_DATA", ""),
+		"header logo as base64 image data (wins over brand-image-url)")
 	fs.StringVar(&cfg.Owner, "owner", envString(getenv, "WACKY_OWNER", cfg.Owner), "copyright holder shown in the footer")
-	fs.StringVar(&cfg.CommitURL, "commit-url", envString(getenv, "WACKY_COMMIT_URL", cfg.CommitURL),
+	fs.StringVar(&cfg.CommitURL, "git-commit-url", envString(getenv, "WACKY_GIT_COMMIT_URL", cfg.CommitURL),
 		"base URL a commit hash is appended to, e.g. https://github.com/org/repo/commit/ (default: hashes are not linked)")
 	fs.StringVar(&level, "log-level", envString(getenv, "WACKY_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
 	fs.Int64Var(&cfg.MaxFileSize, "max-file-size", envInt64(getenv, "WACKY_MAX_FILE_SIZE", cfg.MaxFileSize), "maximum size in bytes of a file served from the repository")
-	fs.IntVar(&cfg.HistoryLimit, "history-limit", int(envInt64(getenv, "WACKY_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
+	fs.IntVar(&cfg.HistoryLimit, "git-history-limit", int(envInt64(getenv, "WACKY_GIT_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
 
 	durations := []struct {
 		p     *time.Duration
@@ -210,8 +223,11 @@ func (c *Config) normalize() error {
 	}
 	c.RepoPath = abs
 
-	if strings.TrimSpace(c.Title) == "" {
-		c.Title = DefaultTitle
+	if strings.TrimSpace(c.BrandTitle) == "" {
+		c.BrandTitle = DefaultTitle
+	}
+	if err := c.normalizeBrandImage(); err != nil {
+		return err
 	}
 	brand, err := normalizeHexColor(c.BrandColor)
 	if err != nil {
@@ -275,6 +291,108 @@ func (c *Config) normalizeCommitURL() error {
 		c.CommitURL += "/"
 	}
 	return nil
+}
+
+// MaxBrandImageBytes caps the decoded size of an inline header logo. It is
+// sent on every page, so a large one would cost every request.
+const MaxBrandImageBytes = 256 << 10
+
+// normalizeBrandImage validates both header logo settings. They are mutually
+// exclusive; when both are given the inline data wins, matching the documented
+// precedence.
+func (c *Config) normalizeBrandImage() error {
+	c.BrandImageURL = strings.TrimSpace(c.BrandImageURL)
+	if c.BrandImageURL != "" {
+		if err := checkBrandImageURL(c.BrandImageURL); err != nil {
+			return err
+		}
+	}
+
+	data, err := normalizeImageData(c.BrandImageData)
+	if err != nil {
+		return err
+	}
+	c.BrandImageData = data
+
+	// The URL is redundant once inline data is present.
+	if c.BrandImageData != "" {
+		c.BrandImageURL = ""
+	}
+	return nil
+}
+
+// checkBrandImageURL rejects anything the page's Content-Security-Policy would
+// refuse to load, so a mistake fails at start-up instead of silently leaving a
+// broken image in the header.
+func checkBrandImageURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse brand-image-url %q: %w", raw, err)
+	}
+	switch u.Scheme {
+	case "":
+		if strings.HasPrefix(raw, "//") {
+			return fmt.Errorf("brand-image-url %q must name its scheme", raw)
+		}
+		return nil
+	case "https":
+		if u.Host == "" {
+			return fmt.Errorf("brand-image-url %q has no host", raw)
+		}
+		return nil
+	default:
+		return fmt.Errorf("brand-image-url %q must be relative or https: "+
+			"the Content-Security-Policy blocks %s images", raw, u.Scheme)
+	}
+}
+
+// normalizeImageData accepts a full data URI or bare base64, and returns a
+// canonical "data:<type>;base64,<data>" URI.
+func normalizeImageData(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+
+	payload := raw
+	if strings.HasPrefix(raw, "data:") {
+		_, after, found := strings.Cut(raw, ";base64,")
+		if !found {
+			return "", fmt.Errorf("brand-image-data must be base64; %q is not", raw)
+		}
+		payload = after
+	}
+	payload = strings.Join(strings.Fields(payload), "")
+
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return "", fmt.Errorf("decode brand-image-data: %w", err)
+	}
+	if len(decoded) == 0 {
+		return "", errors.New("brand-image-data decoded to nothing")
+	}
+	if len(decoded) > MaxBrandImageBytes {
+		return "", fmt.Errorf("brand-image-data is %d bytes, over the %d-byte limit",
+			len(decoded), MaxBrandImageBytes)
+	}
+
+	mediaType := detectImageType(decoded)
+	if mediaType == "" {
+		return "", errors.New("brand-image-data does not decode to a known image format")
+	}
+	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(decoded), nil
+}
+
+// detectImageType names the image format of some bytes, or returns "".
+func detectImageType(data []byte) string {
+	// SVG is XML, which content sniffing reports as text rather than an image.
+	if head := strings.ToLower(string(data[:min(len(data), 1024)])); strings.Contains(head, "<svg") {
+		return "image/svg+xml"
+	}
+	if t := http.DetectContentType(data); strings.HasPrefix(t, "image/") {
+		return t
+	}
+	return ""
 }
 
 // normalizeHexColor accepts "#rgb" or "#rrggbb", with or without the hash,

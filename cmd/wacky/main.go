@@ -2,7 +2,7 @@
 //
 //	wacky                       # serve the repository in the current directory
 //	wacky ~/notes               # serve another repository
-//	wacky -ref v1.0 ~/notes     # serve a pinned revision
+//	wacky -git-ref v1.0 ~/notes # serve a pinned revision
 //
 // The server never writes to the repository.
 package main

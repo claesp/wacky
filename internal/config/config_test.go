@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"flag"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,7 +21,7 @@ func env(pairs map[string]string) func(string) string {
 func TestLoadDefaults(t *testing.T) {
 	dir := t.TempDir()
 
-	cfg, err := Load([]string{"-repo", dir}, env(nil), io.Discard)
+	cfg, err := Load([]string{"-git-repo", dir}, env(nil), io.Discard)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -30,8 +32,8 @@ func TestLoadDefaults(t *testing.T) {
 	if !filepath.IsAbs(cfg.RepoPath) {
 		t.Errorf("RepoPath = %q, want an absolute path", cfg.RepoPath)
 	}
-	if cfg.Title != DefaultTitle {
-		t.Errorf("Title = %q, want %q", cfg.Title, DefaultTitle)
+	if cfg.BrandTitle != DefaultTitle {
+		t.Errorf("BrandTitle = %q, want %q", cfg.BrandTitle, DefaultTitle)
 	}
 	if cfg.BrandColor != DefaultBrandColor {
 		t.Errorf("BrandColor = %q, want %q", cfg.BrandColor, DefaultBrandColor)
@@ -62,7 +64,7 @@ func TestCommitURL(t *testing.T) {
 		{"http://internal.example/c/", "http://internal.example/c/"},
 	}
 	for _, tt := range valid {
-		cfg, err := Load([]string{"-commit-url", tt.in, dir}, env(nil), io.Discard)
+		cfg, err := Load([]string{"-git-commit-url", tt.in, dir}, env(nil), io.Discard)
 		if err != nil {
 			t.Errorf("Load(-commit-url %q): %v", tt.in, err)
 			continue
@@ -80,13 +82,13 @@ func TestCommitURL(t *testing.T) {
 		"https:///no-host/",
 	}
 	for _, in := range invalid {
-		if cfg, err := Load([]string{"-commit-url", in, dir}, env(nil), io.Discard); err == nil {
+		if cfg, err := Load([]string{"-git-commit-url", in, dir}, env(nil), io.Discard); err == nil {
 			t.Errorf("Load(-commit-url %q) succeeded with %q, want an error", in, cfg.CommitURL)
 		}
 	}
 
 	// The environment supplies it just like every other setting.
-	cfg, err := Load([]string{dir}, env(map[string]string{"WACKY_COMMIT_URL": "https://example.com/c/"}), io.Discard)
+	cfg, err := Load([]string{dir}, env(map[string]string{"WACKY_GIT_COMMIT_URL": "https://example.com/c/"}), io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +133,110 @@ func TestBrandColor(t *testing.T) {
 	if cfg.BrandColor != "#c8102e" {
 		t.Errorf("BrandColor from the environment = %q", cfg.BrandColor)
 	}
+}
+
+// A 1x1 PNG, the smallest real image to test with.
+const testPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+func TestBrandImage(t *testing.T) {
+	dir := t.TempDir()
+
+	load := func(t *testing.T, args ...string) Config {
+		t.Helper()
+		cfg, err := Load(append(args, dir), env(nil), io.Discard)
+		if err != nil {
+			t.Fatalf("Load(%v): %v", args, err)
+		}
+		return cfg
+	}
+
+	t.Run("neither set", func(t *testing.T) {
+		cfg := load(t)
+		if cfg.BrandImageURL != "" || cfg.BrandImageData != "" {
+			t.Errorf("images = %q, %q; want both empty", cfg.BrandImageURL, cfg.BrandImageData)
+		}
+	})
+
+	t.Run("relative and https URLs are accepted", func(t *testing.T) {
+		for _, in := range []string{"/static/logo.png", "logo.svg", "https://cdn.example.com/logo.png"} {
+			cfg := load(t, "-brand-image-url", in)
+			if cfg.BrandImageURL != in {
+				t.Errorf("BrandImageURL for %q = %q", in, cfg.BrandImageURL)
+			}
+		}
+	})
+
+	t.Run("URLs the CSP would block are refused", func(t *testing.T) {
+		// http, protocol-relative and exotic schemes would silently fail to
+		// load in the browser, so they fail at start-up instead.
+		for _, in := range []string{"http://example.com/logo.png", "//cdn.example.com/logo.png", "javascript:alert(1)", "ftp://x/y.png"} {
+			if _, err := Load([]string{"-brand-image-url", in, dir}, env(nil), io.Discard); err == nil {
+				t.Errorf("Load(-brand-image-url %q) succeeded, want an error", in)
+			}
+		}
+	})
+
+	t.Run("bare base64 becomes a data URI", func(t *testing.T) {
+		cfg := load(t, "-brand-image-data", testPNG)
+		if !strings.HasPrefix(cfg.BrandImageData, "data:image/png;base64,") {
+			t.Errorf("BrandImageData = %q, want a PNG data URI", cfg.BrandImageData)
+		}
+	})
+
+	t.Run("a full data URI is accepted too", func(t *testing.T) {
+		cfg := load(t, "-brand-image-data", "data:image/png;base64,"+testPNG)
+		if !strings.HasPrefix(cfg.BrandImageData, "data:image/png;base64,") {
+			t.Errorf("BrandImageData = %q", cfg.BrandImageData)
+		}
+	})
+
+	t.Run("SVG is recognised, which sniffing alone would miss", func(t *testing.T) {
+		svg := base64.StdEncoding.EncodeToString([]byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`))
+		cfg := load(t, "-brand-image-data", svg)
+		if !strings.HasPrefix(cfg.BrandImageData, "data:image/svg+xml;base64,") {
+			t.Errorf("BrandImageData = %q, want an SVG data URI", cfg.BrandImageData)
+		}
+	})
+
+	t.Run("data wins over a URL", func(t *testing.T) {
+		cfg := load(t, "-brand-image-url", "/static/logo.png", "-brand-image-data", testPNG)
+		if cfg.BrandImageData == "" {
+			t.Error("BrandImageData is empty, want it to win")
+		}
+		if cfg.BrandImageURL != "" {
+			t.Errorf("BrandImageURL = %q, want it cleared once data is set", cfg.BrandImageURL)
+		}
+	})
+
+	t.Run("bad data is refused", func(t *testing.T) {
+		notAnImage := base64.StdEncoding.EncodeToString([]byte("just some text, not an image at all"))
+		tooBig := base64.StdEncoding.EncodeToString(make([]byte, MaxBrandImageBytes+1))
+
+		// Note that base64 of nothing is the empty string, which is simply the
+		// unset case rather than an error.
+		for name, in := range map[string]string{
+			"not base64":       "!!!! not base64 !!!!",
+			"not an image":     notAnImage,
+			"over the limit":   tooBig,
+			"data URI, no b64": "data:image/png,rawbytes",
+		} {
+			if _, err := Load([]string{"-brand-image-data", in, dir}, env(nil), io.Discard); err == nil {
+				t.Errorf("Load(-brand-image-data %s) succeeded, want an error", name)
+			}
+		}
+	})
+
+	t.Run("from the environment", func(t *testing.T) {
+		cfg, err := Load([]string{dir}, env(map[string]string{
+			"WACKY_BRAND_IMAGE_URL": "/static/logo.png",
+		}), io.Discard)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.BrandImageURL != "/static/logo.png" {
+			t.Errorf("BrandImageURL from the environment = %q", cfg.BrandImageURL)
+		}
+	})
 }
 
 // Both thresholds are genuinely optional, and zero is a real value — so they
@@ -251,7 +357,7 @@ func TestFlagsBeatEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	environment := env(map[string]string{
 		"WACKY_ADDR":            ":9999",
-		"WACKY_TITLE":           "From Env",
+		"WACKY_BRAND_TITLE":     "From Env",
 		"WACKY_RELOAD_INTERVAL": "1m",
 		"WACKY_LOG_LEVEL":       "debug",
 	})
@@ -264,8 +370,8 @@ func TestFlagsBeatEnvironment(t *testing.T) {
 	if cfg.Addr != ":7000" {
 		t.Errorf("Addr = %q, want the flag value", cfg.Addr)
 	}
-	if cfg.Title != "From Env" {
-		t.Errorf("Title = %q, want the environment value", cfg.Title)
+	if cfg.BrandTitle != "From Env" {
+		t.Errorf("BrandTitle = %q, want the environment value", cfg.BrandTitle)
 	}
 	if cfg.ReloadInterval != time.Minute {
 		t.Errorf("ReloadInterval = %v, want 1m", cfg.ReloadInterval)
@@ -278,7 +384,7 @@ func TestFlagsBeatEnvironment(t *testing.T) {
 // The same inputs must always produce the same configuration.
 func TestLoadIsDeterministic(t *testing.T) {
 	dir := t.TempDir()
-	args := []string{"-addr", ":8081", "-title", "Docs", dir}
+	args := []string{"-addr", ":8081", "-brand-title", "Docs", dir}
 	environment := env(map[string]string{"WACKY_LOG_LEVEL": "warn"})
 
 	first, err := Load(args, environment, io.Discard)

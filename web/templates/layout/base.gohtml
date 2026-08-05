@@ -26,7 +26,9 @@
     </svg>
     <span class="visually-hidden">Menu</span>
   </label>
-  <a class="brand" href="/">{{.Site}}</a>
+  <a class="brand" href="/">
+    {{- with .BrandImage}}<img src="{{.}}" alt="{{$.Site}}">{{else}}{{$.Site}}{{end -}}
+  </a>
   {{if .Ref}}<span class="ref" title="Serving a pinned revision">{{.Ref}}</span>{{end}}
   {{/* No submit button: the form has a single field, so pressing Enter (or a
        phone keyboard's Search key) submits it. */}}

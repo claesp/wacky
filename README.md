@@ -36,21 +36,53 @@ wacky [flags] [repository-path]
 | Flag | Environment | Default | Meaning |
 |------|-------------|---------|---------|
 | `-addr` | `WACKY_ADDR` | `127.0.0.1:8080` | Listen address |
-| `-repo` | `WACKY_REPO` | `.` | Repository (or sub-directory) to serve |
-| `-ref` | `WACKY_REF` | working tree | Serve a pinned branch, tag or commit |
-| `-title` | `WACKY_TITLE` | `Wacky` | Site title |
+| `-git-repo` | `WACKY_GIT_REPO` | `.` | Repository (or sub-directory) to serve |
+| `-git-ref` | `WACKY_GIT_REF` | working tree | Serve a pinned branch, tag or commit |
+| `-brand-title` | `WACKY_BRAND_TITLE` | `Wacky` | Site title |
 | `-brand-color` | `WACKY_BRAND_COLOR` | `#1f5fa8` | Header colour as an RGB hex string; the gradient and brand text derive from it |
+| `-brand-image-url` | `WACKY_BRAND_IMAGE_URL` | none | Header logo, relative or `https` URL; replaces the title text |
+| `-brand-image-data` | `WACKY_BRAND_IMAGE_DATA` | none | Header logo as base64 image data; wins over `-brand-image-url` |
 | `-owner` | `WACKY_OWNER` | `The Authors` | Copyright holder in the footer |
-| `-commit-url` | `WACKY_COMMIT_URL` | none | Base URL a commit hash is appended to, e.g. `https://github.com/org/repo/commit/` |
+| `-git-commit-url` | `WACKY_GIT_COMMIT_URL` | none | Base URL a commit hash is appended to, e.g. `https://github.com/org/repo/commit/` |
 | `-classification-threshold-low` | `WACKY_CLASSIFICATION_THRESHOLD_LOW` | unset | `classification_level` at which a page carries a notice |
 | `-classification-threshold-high` | `WACKY_CLASSIFICATION_THRESHOLD_HIGH` | unset | `classification_level` at which that notice becomes severe |
 | `-reload-interval` | `WACKY_RELOAD_INTERVAL` | `15s` | Index rebuild period, `0` disables |
 | `-log-level` | `WACKY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `-max-file-size` | `WACKY_MAX_FILE_SIZE` | `4194304` | Largest file that will be read |
-| `-history-limit` | `WACKY_HISTORY_LIMIT` | `30` | Commits shown in the history view |
+| `-git-history-limit` | `WACKY_GIT_HISTORY_LIMIT` | `30` | Commits shown in the history view |
 
 Timeouts (`-read-timeout`, `-write-timeout`, `-idle-timeout`,
 `-shutdown-timeout`, `-git-timeout`) follow the same flag/environment pattern.
+
+### Branding
+
+The header takes its gradient from `-brand-color` and picks the text colour
+that stays legible against it. `-brand-title` names the site; either logo
+setting replaces that text with an image, scaled to fit the bar.
+
+A logo can be a URL the browser fetches:
+
+```bash
+wacky -brand-image-url /raw/assets/logo.svg ~/notes
+```
+
+…or the image itself, so the page carries no extra request:
+
+```bash
+wacky -brand-image-data "$(base64 < logo.svg | tr -d '\n')" ~/notes
+```
+
+That flag also takes a literal string. This one is a 223-byte SVG wordmark,
+ready to paste:
+
+```bash
+wacky -brand-image-data "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iMjgiPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMjgiIHJ4PSI0IiBmaWxsPSIjMWY1ZmE4Ii8+PHRleHQgeD0iOCIgeT0iMjAiIGZvbnQtZmFtaWx5PSJIZWx2ZXRpY2EiIGZvbnQtc2l6ZT0iMTYiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiNmZmYiPldhY2t5PC90ZXh0Pjwvc3ZnPg==" ~/notes
+```
+
+The value may be bare base64 or a full `data:` URI, wrapped or not — the
+format is detected from the decoded bytes (PNG, JPEG, GIF, WebP and SVG),
+and the image is capped at 256 KiB because it ships with every page. When
+both logo settings are given, the inline data wins.
 
 Pointing at a sub-directory narrows the wiki to that sub-tree — `wacky ~/code/app/docs`
 serves `docs/` as the site root, and the rest of the repository stays invisible.

@@ -89,11 +89,21 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  align-self: center;
   font-family: var(--font);
   font-size: 1.45rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--brand-text);
+}
+.brand img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-height: 2.25rem;
+  max-width: 16rem;
 }
 
 .menu-button {
@@ -296,6 +306,7 @@ main { min-width: 0; }
 .page h2:hover .anchor,
 .page h3:hover .anchor,
 .page h4:hover .anchor { opacity: 1; }
+.page .anchor:hover { text-decoration: none; color: var(--accent); }
 
 .page p { margin: 0 0 1.1rem; }
 .page ul, .page ol { margin: 0 0 1.1rem; padding-left: 1.6rem; }

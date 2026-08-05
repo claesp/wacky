@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"net/url"
 	"path"
@@ -22,8 +23,12 @@ type layout struct {
 	Slug      string
 	Query     string
 	Ref       string
-	Nav       []*wacky.Node
-	Stats     wacky.Stats
+	// BrandImage is the header logo's URL, empty when the title text is used.
+	// It is a template.URL because a data: URI would otherwise be filtered
+	// out; config validates it, so it is not user-supplied content.
+	BrandImage template.URL
+	Nav        []*wacky.Node
+	Stats      wacky.Stats
 	// Copyright is the footer notice, empty when no owner is configured.
 	Copyright string
 	// CommitURL is the base URL commit hashes link to, empty when unset.
@@ -45,17 +50,28 @@ type layout struct {
 func (s *Server) layout(r *http.Request, title, slug string) layout {
 	stats := s.store.Stats()
 	return layout{
-		Site:      s.cfg.Title,
-		PageTitle: title,
-		Slug:      slug,
-		Ref:       s.cfg.Ref,
-		Nav:       s.store.Tree().Children,
-		Stats:     stats,
-		Copyright: copyrightNotice(s.cfg.Owner, stats.First.When.Year(), time.Now().Year()),
-		CommitURL: s.cfg.CommitURL,
-		Path:      r.URL.Path,
-		Assets:    s.assets.version,
+		Site:       s.cfg.BrandTitle,
+		BrandImage: s.brandImage(),
+		PageTitle:  title,
+		Slug:       slug,
+		Ref:        s.cfg.Ref,
+		Nav:        s.store.Tree().Children,
+		Stats:      stats,
+		Copyright:  copyrightNotice(s.cfg.Owner, stats.First.When.Year(), time.Now().Year()),
+		CommitURL:  s.cfg.CommitURL,
+		Path:       r.URL.Path,
+		Assets:     s.assets.version,
 	}
+}
+
+// brandImage resolves the header logo: inline data wins over a URL, and an
+// empty result leaves the title text in place. config has already checked that
+// the value is a relative URL, an https one, or an image data URI.
+func (s *Server) brandImage() template.URL {
+	if s.cfg.BrandImageData != "" {
+		return template.URL(s.cfg.BrandImageData) //nolint:gosec // validated by config
+	}
+	return template.URL(s.cfg.BrandImageURL) //nolint:gosec // validated by config
 }
 
 // copyrightNotice renders the footer notice from the owner and the span of
