@@ -35,6 +35,10 @@
   </form>
 </header>
 
+{{with .ClassificationText}}
+<div class="classification {{$.ClassificationSeverity}}" role="note">{{.}}</div>
+{{end}}
+
 <div class="shell">
   <aside class="sidebar">
     <h2 class="sidebar-title">Contents</h2>

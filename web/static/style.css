@@ -42,6 +42,7 @@ html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
+  position: relative;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font);
@@ -145,6 +146,25 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
   border-radius: var(--radius);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.classification {
+  padding: 0.6rem 1.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+.classification.unrated { background: #e6e6e2; color: #3f4247; }
+.classification.low { background: #f6e6a8; color: #4a3a00; }
+.classification.high { background: #b35309; color: #fff6ee; }
+
+@media (prefers-color-scheme: dark) {
+  .classification { border-bottom-color: rgba(255, 255, 255, 0.14); }
+  .classification.unrated { background: #33353a; color: #d6d8dc; }
+  .classification.low { background: #6b5a11; color: #f7ecc2; }
+  .classification.high { background: #8f4207; color: #fff2e6; }
 }
 
 .shell {
@@ -433,13 +453,9 @@ mark { background: var(--mark); color: inherit; padding: 0 0.15em; }
     max-width: 46rem;
   }
   .sidebar {
-    position: fixed;
-    top: calc(var(--topbar-height) + 1.75rem);
+    position: absolute;
     left: 1.25rem;
     width: 14rem;
-    max-height: calc(100vh - var(--topbar-height) - 3.5rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
   }
   .footer {
     max-width: none;

@@ -53,6 +53,11 @@ type Config struct {
 	// CommitURL is the base URL a commit hash is appended to, for example
 	// "https://github.com/org/repo/commit/". Empty leaves hashes unlinked.
 	CommitURL string
+	// ClassificationLow and ClassificationHigh bound the classification
+	// notice shown above a page. Nil means unset; with both unset no notice
+	// is ever shown, whatever the front matter says.
+	ClassificationLow  *int
+	ClassificationHigh *int
 	// ReloadInterval controls how often the page index is rebuilt from the
 	// repository. Zero disables background reloading.
 	ReloadInterval time.Duration
@@ -110,7 +115,13 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 			"for example WACKY_ADDR or WACKY_RELOAD_INTERVAL.\n")
 	}
 
-	var level string
+	var level, classLow, classHigh string
+	fs.StringVar(&classLow, "classification-threshold-low",
+		envString(getenv, "WACKY_CLASSIFICATION_THRESHOLD_LOW", ""),
+		"classification_level at which a page carries a notice (unset: no notice)")
+	fs.StringVar(&classHigh, "classification-threshold-high",
+		envString(getenv, "WACKY_CLASSIFICATION_THRESHOLD_HIGH", ""),
+		"classification_level at which that notice becomes a severe one (unset: no notice)")
 	fs.StringVar(&cfg.Addr, "addr", envString(getenv, "WACKY_ADDR", cfg.Addr), "address to listen on")
 	fs.StringVar(&cfg.RepoPath, "repo", envString(getenv, "WACKY_REPO", cfg.RepoPath), "path to the Git repository to serve")
 	fs.StringVar(&cfg.Ref, "ref", envString(getenv, "WACKY_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
@@ -159,6 +170,13 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 	}
 	cfg.LogLevel = lvl
 
+	if cfg.ClassificationLow, err = optionalInt(classLow, "classification-threshold-low"); err != nil {
+		return Config{}, err
+	}
+	if cfg.ClassificationHigh, err = optionalInt(classHigh, "classification-threshold-high"); err != nil {
+		return Config{}, err
+	}
+
 	if err := cfg.normalize(); err != nil {
 		return Config{}, err
 	}
@@ -194,6 +212,11 @@ func (c *Config) normalize() error {
 	}
 	if err := c.normalizeCommitURL(); err != nil {
 		return err
+	}
+	if c.ClassificationLow != nil && c.ClassificationHigh != nil &&
+		*c.ClassificationLow > *c.ClassificationHigh {
+		return fmt.Errorf("classification-threshold-low (%d) must not exceed classification-threshold-high (%d)",
+			*c.ClassificationLow, *c.ClassificationHigh)
 	}
 	if c.MaxFileSize <= 0 {
 		return fmt.Errorf("max-file-size must be positive, got %d", c.MaxFileSize)
@@ -239,6 +262,20 @@ func (c *Config) normalizeCommitURL() error {
 		c.CommitURL += "/"
 	}
 	return nil
+}
+
+// optionalInt parses a setting that may be left unset, which a plain integer
+// flag cannot express: zero is a legitimate threshold.
+func optionalInt(raw, name string) (*int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s=%q: must be a whole number", name, raw)
+	}
+	return &n, nil
 }
 
 func envString(getenv func(string) string, key, def string) string {

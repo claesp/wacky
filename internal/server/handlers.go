@@ -33,6 +33,9 @@ type layout struct {
 	Source     string
 	LastCommit git.Commit
 	HasHistory bool
+	// Classification is the notice above the page, empty when none applies.
+	ClassificationText     string
+	ClassificationSeverity string
 	// Path is the request path, used to mark the current navigation entry.
 	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
@@ -72,6 +75,42 @@ func copyrightNotice(owner string, firstYear, currentYear int) string {
 		years += "-" + strconv.Itoa(currentYear)
 	}
 	return "Copyright © " + owner + ", " + years
+}
+
+// Classification notice severities, used as the banner's CSS class.
+const (
+	classUnrated = "unrated"
+	classLow     = "low"
+	classHigh    = "high"
+)
+
+// classificationNotice decides which banner a document carries, from the
+// configured thresholds and the document's own front matter. It returns empty
+// strings when no banner belongs on the page.
+//
+// With both thresholds unset the feature is off entirely. With either set, a
+// document that does not declare both front matter fields counts as unrated.
+// A level below the low threshold is classified but below the level worth
+// announcing, so it carries no banner.
+func classificationNotice(low, high *int, meta map[string]string) (text, severity string) {
+	if low == nil && high == nil {
+		return "", ""
+	}
+
+	name := strings.TrimSpace(meta["classification"])
+	level, err := strconv.Atoi(strings.TrimSpace(meta["classification_level"]))
+	if name == "" || err != nil {
+		return "This document is not yet rated", classUnrated
+	}
+
+	switch {
+	case high != nil && level >= *high:
+		return "This document has been classified as " + name, classHigh
+	case low == nil || level >= *low:
+		return "This document has been classified as " + name, classLow
+	default:
+		return "", ""
+	}
 }
 
 // pageView renders a single wiki page.
@@ -201,6 +240,8 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page *wacky.
 		Breadcrumbs: s.store.Breadcrumbs(page.Slug),
 	}
 	view.Source = page.Path
+	view.ClassificationText, view.ClassificationSeverity = classificationNotice(
+		s.cfg.ClassificationLow, s.cfg.ClassificationHigh, doc.Meta)
 
 	ctx, cancel := s.timeoutFor(r)
 	defer cancel()

@@ -24,6 +24,21 @@ is a pure function: the same input always produces the same HTML.
 | `---`, `***`, `___` | Thematic breaks |
 | `---` front matter | Flat `key: value` pairs; `title` wins over the first heading |
 
+## Front matter fields
+
+| Key | Meaning |
+|-----|---------|
+| `title` | The page title, overriding the first heading |
+| `classification` | The label shown in the classification notice, e.g. `Internal Use Only` |
+| `classification_level` | A whole number compared against the configured thresholds |
+
+`classification` and `classification_level` only do anything when the server
+runs with `-classification-threshold-low` or `-classification-threshold-high`
+set; without either, no notice is ever shown. With either set, a page that
+declares neither field is reported as not yet rated. Any other keys are kept in
+the document's metadata and ignored.
+
+
 ## Inline
 
 `*em*`, `**strong**`, `***both***`, `~~strikethrough~~`, `` `code` ``,

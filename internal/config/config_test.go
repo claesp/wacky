@@ -92,6 +92,87 @@ func TestCommitURL(t *testing.T) {
 	}
 }
 
+// Both thresholds are genuinely optional, and zero is a real value — so they
+// cannot be plain integers with a zero default.
+func TestClassificationThresholds(t *testing.T) {
+	dir := t.TempDir()
+
+	load := func(t *testing.T, args []string, environment map[string]string) Config {
+		t.Helper()
+		cfg, err := Load(append(args, dir), env(environment), io.Discard)
+		if err != nil {
+			t.Fatalf("Load(%v): %v", args, err)
+		}
+		return cfg
+	}
+
+	t.Run("unset by default", func(t *testing.T) {
+		cfg := load(t, nil, nil)
+		if cfg.ClassificationLow != nil || cfg.ClassificationHigh != nil {
+			t.Errorf("thresholds = %v, %v; want both nil", cfg.ClassificationLow, cfg.ClassificationHigh)
+		}
+	})
+
+	t.Run("from flags", func(t *testing.T) {
+		cfg := load(t, []string{"-classification-threshold-low", "2", "-classification-threshold-high", "5"}, nil)
+		if cfg.ClassificationLow == nil || *cfg.ClassificationLow != 2 {
+			t.Errorf("low = %v, want 2", cfg.ClassificationLow)
+		}
+		if cfg.ClassificationHigh == nil || *cfg.ClassificationHigh != 5 {
+			t.Errorf("high = %v, want 5", cfg.ClassificationHigh)
+		}
+	})
+
+	t.Run("from the environment", func(t *testing.T) {
+		cfg := load(t, nil, map[string]string{
+			"WACKY_CLASSIFICATION_THRESHOLD_LOW":  "1",
+			"WACKY_CLASSIFICATION_THRESHOLD_HIGH": "4",
+		})
+		if cfg.ClassificationLow == nil || *cfg.ClassificationLow != 1 {
+			t.Errorf("low = %v, want 1", cfg.ClassificationLow)
+		}
+		if cfg.ClassificationHigh == nil || *cfg.ClassificationHigh != 4 {
+			t.Errorf("high = %v, want 4", cfg.ClassificationHigh)
+		}
+	})
+
+	t.Run("zero is set, not unset", func(t *testing.T) {
+		cfg := load(t, []string{"-classification-threshold-low", "0"}, nil)
+		if cfg.ClassificationLow == nil || *cfg.ClassificationLow != 0 {
+			t.Errorf("low = %v, want a set zero", cfg.ClassificationLow)
+		}
+	})
+
+	t.Run("one may be set alone", func(t *testing.T) {
+		cfg := load(t, []string{"-classification-threshold-high", "5"}, nil)
+		if cfg.ClassificationLow != nil {
+			t.Errorf("low = %v, want nil", cfg.ClassificationLow)
+		}
+		if cfg.ClassificationHigh == nil {
+			t.Error("high is nil, want 5")
+		}
+	})
+
+	t.Run("negative values are allowed", func(t *testing.T) {
+		cfg := load(t, []string{"-classification-threshold-low", "-3"}, nil)
+		if cfg.ClassificationLow == nil || *cfg.ClassificationLow != -3 {
+			t.Errorf("low = %v, want -3", cfg.ClassificationLow)
+		}
+	})
+
+	rejected := [][]string{
+		{"-classification-threshold-low", "high"},
+		{"-classification-threshold-high", "3.5"},
+		// An inverted range would make the low band unreachable.
+		{"-classification-threshold-low", "9", "-classification-threshold-high", "2"},
+	}
+	for _, args := range rejected {
+		if _, err := Load(append(args, dir), env(nil), io.Discard); err == nil {
+			t.Errorf("Load(%v) succeeded, want an error", args)
+		}
+	}
+}
+
 // An owner that is unset, blank or whitespace falls back to the default; a
 // real one is kept and trimmed.
 func TestOwnerDefaults(t *testing.T) {
