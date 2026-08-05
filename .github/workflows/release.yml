@@ -1,0 +1,585 @@
+# Builds wacky for every supported platform, packages the binaries with the
+# README and SHA256 checksums, builds .deb and .rpm packages, and publishes the
+# lot as a GitHub release.
+#
+# A tag push is a release: `git tag -a v1.2.3 -m 'v1.2.3' && git push --tags`.
+# Every other run builds and verifies the same artifacts without publishing
+# them, so the pipeline is never first exercised by a release.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. v1.2.3"
+        required: true
+        type: string
+      publish:
+        description: "Publish a GitHub release"
+        type: boolean
+        default: false
+
+# Read-only by default; only the publishing job asks for more.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.24"
+  MODULE: github.com/claesp/wacky
+  MAINTAINER: "Wacky Maintainers <wacky@cp69.net>"
+  HOMEPAGE: https://github.com/claesp/wacky
+  SUMMARY: "A Git-backed wiki server"
+  # The SPDX identifier for the LICENSE file at the repository root, which is
+  # what both package formats ship verbatim. Change one, change the other.
+  LICENSE: MIT
+
+jobs:
+  # One place decides what this build calls itself; every other job consumes it.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      pkg: ${{ steps.resolve.outputs.pkg }}
+      date: ${{ steps.resolve.outputs.date }}
+      epoch: ${{ steps.resolve.outputs.epoch }}
+      publish: ${{ steps.resolve.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, which a shallow clone does not carry.
+          fetch-depth: 0
+
+      - id: resolve
+        # The dispatch input is attacker-controllable in principle, so it
+        # arrives as an environment variable rather than being interpolated
+        # into the script.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            version="$INPUT_VERSION"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+          fi
+
+          # A release must be a real version, whatever route it arrived by.
+          publish=false
+          case "$version" in
+            v[0-9]*.[0-9]*.[0-9]*)
+              if [ "$GITHUB_REF_TYPE" = tag ] || [ "${INPUT_PUBLISH:-}" = true ]; then
+                publish=true
+              fi
+              ;;
+            *)
+              if [ -n "${INPUT_VERSION:-}" ]; then
+                echo "::error::version must look like v1.2.3, got '$version'"
+                exit 1
+              fi
+              ;;
+          esac
+
+          # Package versions may not carry a leading v, and rpm forbids the
+          # hyphens that git describe produces. A tilde sorts before what
+          # follows it, which is what an untagged build should do.
+          pkg="${version#v}"
+          pkg="$(printf '%s' "$pkg" | tr '-' '~')"
+
+          # Stamp the commit's own timestamp rather than the wall clock, so
+          # rebuilding a tag produces identical binaries.
+          epoch="$(git log -1 --format=%ct)"
+          date="$(git log -1 --format=%cI)"
+
+          {
+            echo "version=$version"
+            echo "pkg=$pkg"
+            echo "date=$date"
+            echo "epoch=$epoch"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Building $version (package version $pkg, publish=$publish)" >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed: $unformatted"
+            exit 1
+          fi
+      - run: go vet ./...
+      # The Git tests build throwaway repositories; the runner has git.
+      - run: go test -race ./...
+
+  # Cross-compiled binaries. CGO is off, so one runner builds every target.
+  build:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux, the platforms wacky is actually deployed on.
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: arm, goarm: "7" }
+          - { goos: linux, goarch: "386" }
+          - { goos: linux, goarch: riscv64 }
+          - { goos: linux, goarch: ppc64le }
+          - { goos: linux, goarch: s390x }
+          # The BSDs and macOS: a real git binary and real sockets.
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: freebsd, goarch: amd64 }
+          - { goos: freebsd, goarch: arm64 }
+          - { goos: openbsd, goarch: amd64 }
+          - { goos: openbsd, goarch: arm64 }
+          - { goos: netbsd, goarch: amd64 }
+          - { goos: netbsd, goarch: arm64 }
+          # Windows builds and serves; SIGTERM is not delivered there, so
+          # shutdown is Ctrl-C or the service manager's own stop.
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+          - { goos: windows, goarch: "386" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_DATE: ${{ needs.version.outputs.date }}
+          SOURCE_DATE_EPOCH: ${{ needs.version.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          name="wacky_${VERSION}_${GOOS}_${GOARCH}"
+          bin=wacky
+          [ "$GOOS" = windows ] && bin=wacky.exe
+
+          mkdir -p "staging/$name" dist
+          # -trimpath keeps build paths out of the binary; -s -w drop the
+          # symbol and DWARF tables. The version is stamped in; the commit and
+          # build date come from the VCS stamping the toolchain does itself.
+          go build -trimpath \
+            -ldflags "-s -w -X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.date=${BUILD_DATE}" \
+            -o "staging/$name/$bin" ./cmd/wacky
+
+          cp README.md LICENSE "staging/$name/"
+
+      - name: Archive
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.version.outputs.version }}
+          SOURCE_DATE_EPOCH: ${{ needs.version.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          name="wacky_${VERSION}_${GOOS}_${GOARCH}"
+
+          if [ "$GOOS" = windows ]; then
+            # zip stores no owner, but it does store mtimes; the staged files
+            # carry the commit date so the archive is stable.
+            find "staging/$name" -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
+            (cd staging && zip -qrX "../dist/${name}.zip" "$name")
+          else
+            # Fixed owner, sorted names and a fixed mtime make the archive
+            # byte-identical when the same commit is built again.
+            tar --sort=name --owner=0 --group=0 --numeric-owner \
+                --mtime="@${SOURCE_DATE_EPOCH}" \
+                -czf "dist/${name}.tar.gz" -C staging "$name"
+          fi
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # Debian, Ubuntu and everything else that installs .deb. dpkg-deb is already
+  # on the runner.
+  packages-deb:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build packages
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKG: ${{ needs.version.outputs.pkg }}
+          BUILD_DATE: ${{ needs.version.outputs.date }}
+          SOURCE_DATE_EPOCH: ${{ needs.version.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          # Debian architecture names differ from Go's.
+          for pair in amd64:amd64 arm64:arm64 arm:armhf 386:i386; do
+            goarch="${pair%%:*}"
+            debarch="${pair##*:}"
+            root="$(mktemp -d)"
+            # mktemp makes it 0700, and that mode would be shipped as the
+            # mode of the package's root directory.
+            chmod 0755 "$root"
+
+            GOARM=7 CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath \
+              -ldflags "-s -w -X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.date=${BUILD_DATE}" \
+              -o "$root/usr/bin/wacky" ./cmd/wacky
+            chmod 0755 "$root/usr/bin/wacky"
+
+            install -Dm0644 README.md "$root/usr/share/doc/wacky/README.md"
+            install -Dm0644 packaging/wacky.service "$root/lib/systemd/system/wacky.service"
+            install -Dm0644 packaging/wacky.env "$root/etc/default/wacky"
+            # The repository the shipped unit points at. Empty: an admin
+            # clones into it, or repoints WACKY_GIT_REPO elsewhere.
+            install -d -m0755 "$root/var/lib/wacky/repo"
+
+            # Debian policy requires the licence itself, not a reference to
+            # it. The text is taken from the LICENSE file so the package can
+            # never disagree with the repository: continuation lines are
+            # indented one space, and blank lines become " .".
+            copyright="$(sed -n 's/^Copyright (c) //p' LICENSE | head -1)"
+            cat > "$root/usr/share/doc/wacky/copyright" <<EOF
+          Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+          Upstream-Name: wacky
+          Source: ${HOMEPAGE}
+
+          Files: *
+          Copyright: ${copyright}
+          License: ${LICENSE}
+          $(sed -e 's/^/ /' -e 's/^ $/ ./' LICENSE)
+          EOF
+
+            mkdir -p "$root/DEBIAN"
+            # Local edits to the settings file must survive an upgrade.
+            echo /etc/default/wacky > "$root/DEBIAN/conffiles"
+
+            cat > "$root/DEBIAN/control" <<EOF
+          Package: wacky
+          Version: ${PKG}
+          Architecture: ${debarch}
+          Maintainer: ${MAINTAINER}
+          Section: web
+          Priority: optional
+          Homepage: ${HOMEPAGE}
+          Depends: git, adduser
+          Description: ${SUMMARY}
+           wacky serves the Markdown files of a Git repository as a website:
+           navigation tree, search, per-file history, raw sources and images.
+           .
+           It is read-only, needs no database and no JavaScript, and is a single
+           static binary with the templates and stylesheet compiled in.
+           .
+           The service is installed but not enabled. Review /etc/default/wacky,
+           then: systemctl enable --now wacky
+          EOF
+
+            cat > "$root/DEBIAN/postinst" <<'EOF'
+          #!/bin/sh
+          set -e
+          if [ "$1" = configure ]; then
+            if ! getent passwd wacky >/dev/null; then
+              adduser --system --group --no-create-home --home /nonexistent \
+                      --gecos "wacky wiki server" wacky
+            fi
+            chown -R wacky:wacky /var/lib/wacky
+          fi
+          EOF
+            chmod 0755 "$root/DEBIAN/postinst"
+
+            dpkg-deb --root-owner-group --build "$root" "dist/wacky_${PKG}_${debarch}.deb"
+            rm -rf "$root"
+          done
+
+          ls -l dist
+
+      - name: Inspect what was built
+        run: |
+          set -euo pipefail
+          for f in dist/*.deb; do
+            echo "=== $f"
+            dpkg-deb --info "$f"
+            dpkg-deb --contents "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-deb
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  # Fedora, RHEL and Rocky. Built inside Fedora so that rpmbuild and the
+  # systemd rpm macros are the real ones. RHEL and Rocky of the same major
+  # version install the identical el package — the dist tag is what names it.
+  packages-rpm:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    container: fedora:42
+    steps:
+      - name: Install build tools
+        # No Go here: the pinned toolchain below builds every artifact, so a
+        # package never ships a binary from a different compiler than the
+        # archives do. tar is what setup-go and the artifact actions need.
+        run: dnf -y install --setopt=install_weak_deps=False rpm-build systemd-rpm-macros git tar
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trust the checkout
+        # The checkout is owned by a different uid than the one git runs as here.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build packages
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKG: ${{ needs.version.outputs.pkg }}
+          BUILD_DATE: ${{ needs.version.outputs.date }}
+          SOURCE_DATE_EPOCH: ${{ needs.version.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist rpm/SOURCES rpm/SPECS
+
+          cp README.md LICENSE packaging/wacky.service packaging/wacky.env rpm/SOURCES/
+
+          cat > rpm/SPECS/wacky.spec <<'SPEC'
+          # A Go binary carries no separable debug info worth packaging, and
+          # rpm must not strip or otherwise rewrite it.
+          %global debug_package %{nil}
+          %global __os_install_post %{nil}
+
+          Name:           wacky
+          Version:        %{_wacky_version}
+          Release:        1%{?dist}
+          Summary:        %{_wacky_summary}
+          License:        %{_wacky_license}
+          URL:            %{_wacky_url}
+          # rpm's equivalent of the Maintainer field in a deb.
+          Packager:       %{_wacky_packager}
+          Source0:        wacky
+          Source1:        README.md
+          Source2:        wacky.service
+          Source3:        wacky.env
+          Source4:        LICENSE
+          Requires:       git-core
+          Requires(pre):  shadow-utils
+          %{?systemd_requires}
+          BuildRequires:  systemd-rpm-macros
+
+          %description
+          wacky serves the Markdown files of a Git repository as a website:
+          navigation tree, search, per-file history, raw sources and images.
+
+          It is read-only, needs no database and no JavaScript, and is a single
+          static binary with the templates and stylesheet compiled in.
+
+          The service is installed but not enabled. Review /etc/sysconfig/wacky,
+          then: systemctl enable --now wacky
+
+          %prep
+          # Nothing to unpack: the binary is built before rpmbuild runs.
+
+          %build
+          # Likewise nothing to compile.
+
+          %install
+          install -Dpm0755 %{SOURCE0} %{buildroot}%{_bindir}/wacky
+          install -Dpm0644 %{SOURCE1} %{buildroot}%{_docdir}/wacky/README.md
+          install -Dpm0644 %{SOURCE2} %{buildroot}%{_unitdir}/wacky.service
+          install -Dpm0644 %{SOURCE3} %{buildroot}%{_sysconfdir}/sysconfig/wacky
+          install -Dpm0644 %{SOURCE4} %{buildroot}%{_licensedir}/wacky/LICENSE
+          install -d -m0755 %{buildroot}%{_sharedstatedir}/wacky/repo
+
+          %pre
+          getent group wacky >/dev/null || groupadd -r wacky
+          getent passwd wacky >/dev/null || \
+            useradd -r -g wacky -d %{_sharedstatedir}/wacky -s /sbin/nologin \
+                    -c "wacky wiki server" wacky
+          exit 0
+
+          %post
+          %systemd_post wacky.service
+
+          %preun
+          %systemd_preun wacky.service
+
+          %postun
+          %systemd_postun_with_restart wacky.service
+
+          %files
+          %{_bindir}/wacky
+          %dir %{_docdir}/wacky
+          %doc %{_docdir}/wacky/README.md
+          # %license, not %doc: rpm keeps licence files even where --nodocs
+          # has been used to strip documentation.
+          %license %{_licensedir}/wacky/LICENSE
+          %{_unitdir}/wacky.service
+          %config(noreplace) %{_sysconfdir}/sysconfig/wacky
+          %attr(0755,wacky,wacky) %dir %{_sharedstatedir}/wacky
+          %attr(0755,wacky,wacky) %dir %{_sharedstatedir}/wacky/repo
+          SPEC
+
+          # Fedora, and the enterprise rebuilds. RHEL, Rocky, Alma and
+          # CentOS Stream of one major version share a dist tag and a package.
+          for dist in fc42 el9 el8; do
+            for pair in amd64:x86_64 arm64:aarch64; do
+              goarch="${pair%%:*}"
+              rpmarch="${pair##*:}"
+
+              CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath \
+                -ldflags "-s -w -X ${MODULE}/internal/version.version=${VERSION} -X ${MODULE}/internal/version.date=${BUILD_DATE}" \
+                -o rpm/SOURCES/wacky ./cmd/wacky
+
+              rpmbuild -bb rpm/SPECS/wacky.spec \
+                --define "_topdir $PWD/rpm" \
+                --define "dist .${dist}" \
+                --define "_wacky_version ${PKG}" \
+                --define "_wacky_summary ${SUMMARY}" \
+                --define "_wacky_license ${LICENSE}" \
+                --define "_wacky_url ${HOMEPAGE}" \
+                --define "_wacky_packager ${MAINTAINER}" \
+                --target "$rpmarch"
+
+              mv "rpm/RPMS/$rpmarch"/*.rpm dist/
+            done
+          done
+
+          ls -l dist
+
+      - name: Inspect what was built
+        run: |
+          set -euo pipefail
+          for f in dist/*.rpm; do
+            echo "=== $f"
+            rpm -qip "$f"
+            rpm -qlp "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-rpm
+          path: dist/*.rpm
+          if-no-files-found: error
+          retention-days: 7
+
+  # Gathers everything, checksums it, and publishes when the version says so.
+  release:
+    needs: [version, build, packages-deb, packages-rpm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+          merge-multiple: true
+
+      - name: Checksum
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find incoming -type f -exec mv -t dist {} +
+          cd dist
+          # One file covering every artifact: sha256sum -c SHA256SUMS
+          # verifies the whole release in one pass. Written outside the
+          # directory first, so it cannot end up checksumming itself.
+          sums="$(mktemp)"
+          sha256sum ./* | sed 's|\./||' > "$sums"
+          mv "$sums" SHA256SUMS
+          chmod 0644 SHA256SUMS
+          cat SHA256SUMS
+
+          {
+            echo "### Artifacts"
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish
+        if: needs.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          cat > "$notes" <<EOF
+          ## Install
+
+          **Debian, Ubuntu**
+
+              sudo apt install ./wacky_${{ needs.version.outputs.pkg }}_amd64.deb
+
+          **Fedora**
+
+              sudo dnf install ./wacky-${{ needs.version.outputs.pkg }}-1.fc42.x86_64.rpm
+
+          **RHEL, Rocky, Alma** — the el9 package installs on all of them:
+
+              sudo dnf install ./wacky-${{ needs.version.outputs.pkg }}-1.el9.x86_64.rpm
+
+          **Anything else** — take the archive for your platform, which holds the
+          binary and the README.
+
+          ## Verify
+
+              sha256sum -c SHA256SUMS
+
+          Each binary reports what it is: \`wacky -version\`.
+          EOF
+
+          # --verify-tag refuses to invent a tag that does not exist.
+          gh release create "$VERSION" \
+            --repo "$REPO" \
+            --title "$VERSION" \
+            --notes-file "$notes" \
+            --verify-tag \
+            dist/*

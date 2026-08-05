@@ -13,6 +13,7 @@ import (
 
 	"github.com/claesp/wacky/internal/git"
 	"github.com/claesp/wacky/internal/markdown"
+	"github.com/claesp/wacky/internal/version"
 	"github.com/claesp/wacky/internal/wacky"
 )
 
@@ -459,6 +460,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	stats := s.store.Stats()
 	body := map[string]any{
 		"status":    "ok",
+		"version":   version.Short(),
 		"repo":      stats.Root,
 		"ref":       refOrWorkingTree(stats.Ref),
 		"commit":    stats.Head.Hash,

@@ -27,6 +27,44 @@ only file you need to deploy:
 go build -o wacky ./cmd/wacky
 ```
 
+### Versioning
+
+A release is a Git tag, `vX.Y.Z`. Tagging one and pushing it is the whole
+release procedure; nothing in the repository records a version number, so
+there is no second place to keep in step.
+
+```bash
+git tag -a v1.2.3 -m v1.2.3 && git push origin v1.2.3
+```
+
+The tag is stamped into the binary at link time:
+
+```bash
+go build -ldflags "-X github.com/claesp/wacky/internal/version.version=v1.2.3" ./cmd/wacky
+```
+
+Every binary says what it is, whether or not it was stamped:
+
+```bash
+wacky -version
+```
+```text
+wacky v1.2.3 (2ed6c9f0ea1a, built 2026-08-05T01:00:00Z, go1.24.0, linux/amd64)
+```
+
+An unstamped build is not anonymous: the Go toolchain records the revision,
+the build time and whether the working tree was dirty, and wacky reads them
+back out of its own binary. So a development build reports something like
+`v0.0.0-20260805015941-2ed6c9f0ea1a+dirty` rather than a bare `dev`.
+
+The version also appears in the first line of the log and in `/healthz`, which
+is how you tell what a deployment is actually running. The container image
+takes it as a build argument:
+
+```bash
+docker build --build-arg VERSION=v1.2.3 -t wacky:v1.2.3 .
+```
+
 ### Container
 
 ```bash
@@ -82,6 +120,7 @@ wacky [flags] [repository-path]
 | `-reload-interval` | `WACKY_RELOAD_INTERVAL` | `15s` | Index rebuild period, `0` disables |
 | `-log-level` | `WACKY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `-health-check` | `WACKY_HEALTH_CHECK` | `false` | Probe `/healthz` on `-addr` and exit, instead of serving |
+| `-version` | — | `false` | Print the version and exit |
 | `-max-file-size` | `WACKY_MAX_FILE_SIZE` | `4194304` | Largest file that will be read |
 | `-git-history-limit` | `WACKY_GIT_HISTORY_LIMIT` | `30` | Commits shown in the history view |
 
@@ -185,3 +224,9 @@ go test ./...
 
 The Git tests build a throwaway repository in a temporary directory and skip
 themselves when `git` is not installed.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). The release packages carry it too: Debian
+packages as `/usr/share/doc/wacky/copyright`, RPMs as
+`/usr/share/licenses/wacky/LICENSE`, and every archive alongside the binary.

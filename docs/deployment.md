@@ -4,8 +4,69 @@ title: Deployment
 
 # Deployment
 
-How to build the container image, run it, and deploy it on Kubernetes with the
-manifests in [`k8s/`](../k8s).
+How to install wacky from a package, build the container image, run it, and
+deploy it on Kubernetes with the manifests in [`k8s/`](../k8s).
+
+## Packages
+
+Every tagged release publishes binaries for each supported platform, `.deb`
+packages, and `.rpm` packages, with a `SHA256SUMS` covering all of them.
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+**Debian, Ubuntu and derivatives** — `amd64`, `arm64`, `armhf`, `i386`:
+
+```bash
+sudo apt install ./wacky_1.2.3_amd64.deb
+```
+
+**Fedora** — `x86_64`, `aarch64`:
+
+```bash
+sudo dnf install ./wacky-1.2.3-1.fc42.x86_64.rpm
+```
+
+**RHEL, Rocky, Alma and CentOS Stream** — the `el9` and `el8` packages match
+the major version, not the vendor. RHEL 9, Rocky 9 and Alma 9 all install the
+same `el9` file; there is no separate Rocky build, because there would be
+nothing different in it:
+
+```bash
+sudo dnf install ./wacky-1.2.3-1.el9.x86_64.rpm
+```
+
+**Anything else** — take the archive for your platform. It holds the binary,
+this README and the licence, and the binary is all that has to be installed.
+
+Each package declares a dependency on git, installs a systemd unit and a
+settings file, and creates a `wacky` system user. The service is deliberately
+**not enabled on install**: a wiki server pointed at an empty directory should
+not start serving on its own. Review the settings, then start it:
+
+```bash
+sudoedit /etc/default/wacky      # /etc/sysconfig/wacky on Fedora, RHEL, Rocky
+sudo systemctl enable --now wacky
+```
+
+The shipped unit serves `/var/lib/wacky/repo`, which the package creates
+empty. Clone into it, or point `WACKY_GIT_REPO` somewhere else. Keeping it
+current is a `git pull` from cron or a timer; wacky re-indexes on its own
+schedule and picks the result up.
+
+The unit runs the service unprivileged and heavily confined — no capabilities,
+no write access to the filesystem, a private `/tmp` and a system-call filter.
+wacky needs none of what it gives up: it reads a repository and serves it.
+
+### Building packages locally
+
+The release pipeline is [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+It builds on every push, so the packaging is exercised long before a tag
+depends on it, and publishes only for a `vX.Y.Z` tag. To produce the artifacts
+without GitHub, run the same steps: the deb job needs `dpkg-deb`, and the rpm
+job needs `rpmbuild` with `systemd-rpm-macros` — which is why it runs inside a
+Fedora container rather than on the runner.
 
 ## The image
 

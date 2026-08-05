@@ -92,6 +92,9 @@ type Config struct {
 	// than start one. It exists so an image with no shell can still declare a
 	// container health check.
 	HealthCheck bool
+
+	// ShowVersion asks the process to print its version and exit.
+	ShowVersion bool
 }
 
 // Default returns the configuration used when neither flags nor environment
@@ -157,6 +160,10 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 		"base URL a commit hash is appended to, e.g. https://github.com/org/repo/commit/ (default: hashes are not linked)")
 	fs.BoolVar(&cfg.HealthCheck, "health-check", envBool(getenv, "WACKY_HEALTH_CHECK", false),
 		"probe a running server's /healthz at -addr and exit; 0 when it is serving")
+	// No environment variable for this one: a variable that quietly turns a
+	// server into a command that prints and exits would be a trap in a
+	// container.
+	fs.BoolVar(&cfg.ShowVersion, "version", false, "print the version and exit")
 	fs.StringVar(&level, "log-level", envString(getenv, "WACKY_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
 	fs.Int64Var(&cfg.MaxFileSize, "max-file-size", envInt64(getenv, "WACKY_MAX_FILE_SIZE", cfg.MaxFileSize), "maximum size in bytes of a file served from the repository")
 	fs.IntVar(&cfg.HistoryLimit, "git-history-limit", int(envInt64(getenv, "WACKY_GIT_HISTORY_LIMIT", int64(cfg.HistoryLimit))), "number of commits shown in the history view")
@@ -192,6 +199,13 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 		cfg.RepoPath = fs.Arg(0)
 	}
 
+	// Reporting the version asks about the binary, not about a wiki. Making it
+	// depend on a readable repository would mean `wacky -version` failed on
+	// exactly the machines where you most want to ask.
+	if cfg.ShowVersion {
+		return cfg, nil
+	}
+
 	lvl, err := parseLevel(level)
 	if err != nil {
 		return Config{}, err
@@ -217,18 +231,23 @@ func (c *Config) normalize() error {
 		return errors.New("addr must not be empty")
 	}
 
-	abs, err := filepath.Abs(c.RepoPath)
-	if err != nil {
-		return fmt.Errorf("resolve repo path %q: %w", c.RepoPath, err)
+	// A health probe talks to a server over the network and never opens the
+	// repository. Insisting on a readable one would fail the probe for a
+	// reason that has nothing to do with the server's health.
+	if !c.HealthCheck {
+		abs, err := filepath.Abs(c.RepoPath)
+		if err != nil {
+			return fmt.Errorf("resolve repo path %q: %w", c.RepoPath, err)
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			return fmt.Errorf("repo path %q: %w", abs, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("repo path %q is not a directory", abs)
+		}
+		c.RepoPath = abs
 	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		return fmt.Errorf("repo path %q: %w", abs, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("repo path %q is not a directory", abs)
-	}
-	c.RepoPath = abs
 
 	if strings.TrimSpace(c.BrandTitle) == "" {
 		c.BrandTitle = DefaultTitle

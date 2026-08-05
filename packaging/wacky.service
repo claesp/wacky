@@ -1,0 +1,50 @@
+[Unit]
+Description=wacky, a Git-backed wiki server
+Documentation=https://github.com/claesp/wacky
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wacky
+Group=wacky
+
+# Debian puts these under /etc/default, Red Hat under /etc/sysconfig. The
+# leading dash makes a missing file acceptable, so one unit serves both.
+EnvironmentFile=-/etc/default/wacky
+EnvironmentFile=-/etc/sysconfig/wacky
+
+ExecStart=/usr/bin/wacky
+Restart=on-failure
+RestartSec=5s
+
+# wacky reads a repository and serves it. It writes nothing, opens no files
+# outside the repository, and needs no privileges at all — so it is given
+# none. git runs as a child process and needs a writable temporary directory,
+# which PrivateTmp supplies.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

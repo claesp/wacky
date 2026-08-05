@@ -439,3 +439,40 @@ func TestHelpIsNotAnError(t *testing.T) {
 		t.Errorf("Load(-h) = %v, want flag.ErrHelp", err)
 	}
 }
+
+// Asking what the binary is, or whether a server is up, must not depend on a
+// repository being present: both questions are answerable without one.
+func TestQueriesDoNotRequireARepository(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-directory")
+	env := func(string) string { return "" }
+
+	t.Run("version", func(t *testing.T) {
+		cfg, err := Load([]string{"-version", missing}, env, io.Discard)
+		if err != nil {
+			t.Fatalf("Load(-version) = %v, want no error", err)
+		}
+		if !cfg.ShowVersion {
+			t.Error("ShowVersion is false")
+		}
+	})
+
+	t.Run("health check", func(t *testing.T) {
+		cfg, err := Load([]string{"-health-check", missing}, env, io.Discard)
+		if err != nil {
+			t.Fatalf("Load(-health-check) = %v, want no error", err)
+		}
+		if !cfg.HealthCheck {
+			t.Error("HealthCheck is false")
+		}
+		// The address still has to be usable, since the probe dials it.
+		if cfg.Addr == "" {
+			t.Error("Addr is empty")
+		}
+	})
+
+	t.Run("serving still requires one", func(t *testing.T) {
+		if _, err := Load([]string{missing}, env, io.Discard); err == nil {
+			t.Error("Load() = nil, want an error for a missing repository")
+		}
+	})
+}

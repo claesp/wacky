@@ -3,6 +3,11 @@
 # ---- build ------------------------------------------------------------------
 FROM golang:1.24-alpine AS build
 
+# What the image calls itself. Pass it through at build time —
+# `docker build --build-arg VERSION=v1.2.3 .` — so the running server reports
+# the release it came from rather than a bare "dev".
+ARG VERSION=dev
+
 WORKDIR /src
 
 # The module has no third-party dependencies, so this layer needs no network
@@ -14,7 +19,9 @@ COPY . .
 
 # CGO off gives a static binary with no loader or libc to carry. -trimpath keeps
 # build paths out of it; -s -w drop the symbol and DWARF tables.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/wacky ./cmd/wacky
+RUN CGO_ENABLED=0 go build -trimpath \
+      -ldflags="-s -w -X github.com/claesp/wacky/internal/version.version=${VERSION}" \
+      -o /out/wacky ./cmd/wacky
 
 # ---- git ---------------------------------------------------------------------
 # wacky reads the repository by running git, so the runtime image needs a git
