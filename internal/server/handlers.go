@@ -41,6 +41,9 @@ type layout struct {
 	// Classification is the notice above the page, empty when none applies.
 	ClassificationText     string
 	ClassificationSeverity string
+	// Dots maps a page's repository path to its classification dot. It is nil
+	// when no threshold is configured, which leaves every link unmarked.
+	Dots map[string]classDot
 	// Path is the request path, used to mark the current navigation entry.
 	Path string
 	// Assets versions the stylesheet URL so a new binary is picked up at once.
@@ -59,6 +62,7 @@ func (s *Server) layout(r *http.Request, title, slug string) layout {
 		Stats:      stats,
 		Copyright:  copyrightNotice(s.cfg.Owner, stats.First.When.Year(), time.Now().Year()),
 		CommitURL:  s.cfg.CommitURL,
+		Dots:       s.severities(),
 		Path:       r.URL.Path,
 		Assets:     s.assets.version,
 	}
@@ -109,24 +113,68 @@ const (
 // A level below the low threshold is classified but below the level worth
 // announcing, so it carries no banner.
 func classificationNotice(low, high *int, meta map[string]string) (text, severity string) {
-	if low == nil && high == nil {
-		return "", ""
-	}
-
 	name := strings.TrimSpace(meta["classification"])
 	level, err := strconv.Atoi(strings.TrimSpace(meta["classification_level"]))
-	if name == "" || err != nil {
-		return "This document is not yet rated", classUnrated
+
+	switch severity = classificationSeverity(low, high, name, level, err == nil); severity {
+	case classUnrated:
+		return "This document is not yet rated", severity
+	case classLow, classHigh:
+		return "This document has been classified as " + name, severity
+	default:
+		return "", ""
+	}
+}
+
+// classificationSeverity is the single decision the notice and the page-link
+// dots share, so the two can never disagree about a document.
+func classificationSeverity(low, high *int, name string, level int, levelOK bool) string {
+	if low == nil && high == nil {
+		return ""
+	}
+	if name == "" || !levelOK {
+		return classUnrated
 	}
 
 	switch {
 	case high != nil && level >= *high:
-		return "This document has been classified as " + name, classHigh
+		return classHigh
 	case low == nil || level >= *low:
-		return "This document has been classified as " + name, classLow
+		return classLow
 	default:
-		return "", ""
+		return ""
 	}
+}
+
+// classDot labels one page-link dot.
+type classDot struct {
+	Severity string
+	Label    string
+}
+
+// severities maps every page's repository path to its dot, or returns nil when
+// no threshold is configured and the feature is off entirely.
+func (s *Server) severities() map[string]classDot {
+	if s.cfg.ClassificationLow == nil && s.cfg.ClassificationHigh == nil {
+		return nil
+	}
+
+	pages := s.store.Pages()
+	dots := make(map[string]classDot, len(pages))
+	for _, p := range pages {
+		severity := classificationSeverity(
+			s.cfg.ClassificationLow, s.cfg.ClassificationHigh, p.Classification, p.ClassificationLevel, p.Rated)
+		if severity == "" {
+			continue
+		}
+
+		label := "Not yet rated"
+		if severity != classUnrated {
+			label = "Classified as " + p.Classification
+		}
+		dots[p.Path] = classDot{Severity: severity, Label: label}
+	}
+	return dots
 }
 
 // pageView renders a single wiki page.

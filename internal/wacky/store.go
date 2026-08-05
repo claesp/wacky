@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -144,7 +145,12 @@ func (s *Store) Reload(ctx context.Context) error {
 		if page.Size == 0 {
 			page.Size = int64(len(src))
 		}
-		page.Title = firstNonEmpty(headingTitle(src), titleFor(page.Name()))
+		meta := markdown.FrontMatter(src)
+		page.Title = firstNonEmpty(strings.TrimSpace(meta["title"]), headingTitle(src), titleFor(page.Name()))
+		page.Classification = strings.TrimSpace(meta["classification"])
+		if level, err := strconv.Atoi(strings.TrimSpace(meta["classification_level"])); err == nil && page.Classification != "" {
+			page.ClassificationLevel, page.Rated = level, true
+		}
 
 		// A directory index wins over a same-slug sibling.
 		if existing, clash := next.pages[slug]; clash && !isIndex {

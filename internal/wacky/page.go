@@ -38,6 +38,13 @@ type Page struct {
 	// IsIndex reports whether the page represents its directory.
 	IsIndex bool
 
+	// Classification and ClassificationLevel come from the page's front
+	// matter. Rated reports that both were present and the level parsed, which
+	// is what the classification notice and the page-link dots key off.
+	Classification      string
+	ClassificationLevel int
+	Rated               bool
+
 	Size    int64
 	ModTime time.Time
 }

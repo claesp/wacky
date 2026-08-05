@@ -122,6 +122,89 @@ func TestClassificationNotice(t *testing.T) {
 	}
 }
 
+// dottedServer serves a small wiki whose pages span every severity.
+func dottedServer(t *testing.T, low, high *int) *Server {
+	t.Helper()
+
+	src := &fakeSource{files: map[string]string{
+		"README.md":        "---\nclassification: Public\nclassification_level: 0\n---\n\n# Handbook\n",
+		"docs/internal.md": "---\nclassification: Internal\nclassification_level: 3\n---\n\n# Internal\n",
+		"docs/secret.md":   "---\nclassification: SECRET\nclassification_level: 9\n---\n\n# Secret\n",
+		"docs/plain.md":    "# Plain\n\nNo front matter at all.\n",
+	}}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := wacky.NewStore(src, markdown.New(), log)
+	if err := store.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Default()
+	cfg.ClassificationLow, cfg.ClassificationHigh = low, high
+
+	srv, err := New(cfg, store, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
+}
+
+// Every surface that links to a page marks it with a dot of the right colour.
+func TestClassificationDots(t *testing.T) {
+	srv := dottedServer(t, ptr(2), ptr(5))
+
+	// The sidebar appears on every page, so one request covers it.
+	surfaces := map[string]string{
+		"sidebar and page list": "/pages",
+		"search results":        "/search?q=the",
+		"directory listing":     "/wacky/docs",
+	}
+	for name, target := range surfaces {
+		t.Run(name, func(t *testing.T) {
+			body := get(t, srv, target).Body.String()
+
+			for _, want := range []string{
+				`<span class="dot high" role="img" aria-label="Classified as SECRET"`,
+				`<span class="dot low" role="img" aria-label="Classified as Internal"`,
+				`<span class="dot unrated" role="img" aria-label="Not yet rated"`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("GET %s is missing %s", target, want)
+				}
+			}
+		})
+	}
+
+	// A page below the low threshold carries no dot, matching the banner.
+	t.Run("below the threshold has no dot", func(t *testing.T) {
+		body := get(t, srv, "/pages").Body.String()
+		if strings.Contains(body, `aria-label="Classified as Public"`) {
+			t.Error("a page below the low threshold was marked")
+		}
+	})
+
+	// With no threshold configured nothing anywhere is marked.
+	t.Run("silent without thresholds", func(t *testing.T) {
+		plain := dottedServer(t, nil, nil)
+		for _, target := range []string{"/pages", "/search?q=the", "/wacky/docs", "/"} {
+			if body := get(t, plain, target).Body.String(); strings.Contains(body, `class="dot`) {
+				t.Errorf("GET %s shows a dot with no threshold configured", target)
+			}
+		}
+	})
+
+	// The dot and the banner must never disagree about a document.
+	t.Run("dot agrees with the banner", func(t *testing.T) {
+		body := get(t, srv, "/wacky/docs/secret").Body.String()
+
+		if !strings.Contains(body, `<div class="classification high"`) {
+			t.Error("the banner is not the high severity")
+		}
+		if !strings.Contains(body, `<span class="dot high"`) {
+			t.Error("the sidebar dot is not the high severity")
+		}
+	})
+}
+
 // classifiedServer serves one page with the given front matter.
 func classifiedServer(t *testing.T, frontMatter string, low, high *int) *Server {
 	t.Helper()

@@ -7,7 +7,7 @@
   <li><a href="/"{{if eq .Path "/"}} class="active" aria-current="page"{{end}}>Home</a></li>
   <li{{if .Nav}} class="nav-divide"{{end}}><a href="/pages"{{if eq .Path "/pages"}} class="active" aria-current="page"{{end}}>Pages</a></li>
   {{- range .Nav}}
-  {{template "nav-node" dict "Node" . "Current" $.Slug}}
+  {{template "nav-node" dict "Node" . "Current" $.Slug "Dots" $.Dots}}
   {{- end}}
 </ul>
 {{/* Keyed off the page count, not the tree: a repository whose only page is a
@@ -20,16 +20,18 @@
 {{define "nav-node" -}}
 {{- $node := .Node -}}
 {{- $current := .Current -}}
+{{- $dots := .Dots -}}
 <li>
   {{- if or $node.Page (not $node.IsDir)}}
-  <a href="{{$node.URL}}"{{if eq $node.Slug $current}} class="active" aria-current="page"{{end}}>{{$node.Name}}</a>
+  <a href="{{$node.URL}}"{{if eq $node.Slug $current}} class="active" aria-current="page"{{end}}>
+    {{- with $node.Page}}{{template "dot" index $dots .Path}}{{end}}{{$node.Name}}</a>
   {{- else}}
   <span class="nav-dir">{{$node.Name}}</span>
   {{- end}}
   {{- if $node.IsDir}}
   <ul>
     {{- range $node.Children}}
-    {{template "nav-node" dict "Node" . "Current" $current}}
+    {{template "nav-node" dict "Node" . "Current" $current "Dots" $dots}}
     {{- end}}
   </ul>
   {{- end}}

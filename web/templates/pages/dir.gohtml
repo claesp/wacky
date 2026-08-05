@@ -8,7 +8,7 @@
   <ul class="listing">
     {{- range .Children}}
     <li>
-      <a href="{{.URL}}">{{.Name}}</a>
+      <a href="{{.URL}}">{{with .Page}}{{template "dot" index $.Dots .Path}}{{end}}{{.Name}}</a>
       {{- if .IsDir}} <span class="badge">directory</span>{{end}}
       {{- with .Page}}<span class="muted"> &mdash; {{.Path}}</span>{{end}}
     </li>

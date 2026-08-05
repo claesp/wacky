@@ -168,6 +168,25 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
   letter-spacing: 0.02em;
   text-align: center;
 }
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 0.55em;
+  height: 0.55em;
+  margin-right: 0.5em;
+  border-radius: 50%;
+  vertical-align: 0.05em;
+}
+.dot.unrated { background: #a3a39c; }
+.dot.low { background: #d8a800; }
+.dot.high { background: #c8102e; }
+
+@media (prefers-color-scheme: dark) {
+  .dot.unrated { background: #6f7278; }
+  .dot.low { background: #c39b12; }
+  .dot.high { background: #d8324c; }
+}
+
 .classification.unrated { background: #e6e6e2; color: #3f4247; }
 .classification.low { background: #f6e6a8; color: #4a3a00; }
 .classification.high { background: #c8102e; color: #fff; }

@@ -35,8 +35,10 @@ is a pure function: the same input always produces the same HTML.
 `classification` and `classification_level` only do anything when the server
 runs with `-classification-threshold-low` or `-classification-threshold-high`
 set; without either, no notice is ever shown. With either set, a page that
-declares neither field is reported as not yet rated. Any other keys are kept in
-the document's metadata and ignored.
+declares neither field is reported as not yet rated, and every link to a page —
+in the sidebar, the page list, search results and directory listings — carries a
+dot in its classification colour. Any other keys are kept in the document's
+metadata and ignored.
 
 
 ## Inline

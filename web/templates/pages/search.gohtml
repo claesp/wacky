@@ -13,7 +13,7 @@
   <ol class="results">
     {{- range .Results}}
     <li>
-      <a class="result-title" href="{{.Page.URL}}">{{.Page.Title}}</a>
+      <a class="result-title" href="{{.Page.URL}}">{{template "dot" index $.Dots .Page.Path}}{{.Page.Title}}</a>
       <div class="muted"><code>{{.Page.Path}}</code></div>
       <p class="snippet">{{.Snippet}}</p>
     </li>

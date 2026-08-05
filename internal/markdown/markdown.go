@@ -84,6 +84,14 @@ func (r *Renderer) Render(src []byte, opts Options) Document {
 	return doc
 }
 
+// FrontMatter returns just the document's front matter, without rendering it.
+// Callers that only need the metadata — an index building a page list, say —
+// avoid the cost of a full render.
+func FrontMatter(src []byte) map[string]string {
+	_, meta := splitFrontMatter(normalizeNewlines(string(src)))
+	return meta
+}
+
 // documentTitle prefers an explicit front matter title over the first heading.
 func documentTitle(meta map[string]string, headings []Heading) string {
 	if t := strings.TrimSpace(meta["title"]); t != "" {

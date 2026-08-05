@@ -17,3 +17,11 @@
 <span title="{{.Commit.Hash}}">{{.Commit.Subject}}</span>
 {{- end -}}
 {{end}}
+
+{{/* A classification dot in front of a page link. Takes the entry from the
+     Dots map, which is absent when no threshold is configured. */}}
+{{/* Checked on the field, not on the value: a zero struct is truthy in a
+     template, so {{with}} would emit an empty dot when the map is absent. */}}
+{{define "dot" -}}
+{{- if .Severity}}<span class="dot {{.Severity}}" role="img" aria-label="{{.Label}}" title="{{.Label}}"></span>{{end -}}
+{{end}}

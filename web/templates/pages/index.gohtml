@@ -13,7 +13,7 @@
       <tbody>
         {{- range .Pages}}
         <tr>
-          <td><a href="{{.URL}}">{{.Title}}</a></td>
+          <td><a href="{{.URL}}">{{template "dot" index $.Dots .Path}}{{.Title}}</a></td>
           <td><code>{{.Path}}</code></td>
           <td title="{{formatTime .ModTime}}">{{relativeTime .ModTime}}</td>
         </tr>
