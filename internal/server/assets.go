@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -40,9 +41,10 @@ type assets struct {
 	version string
 }
 
-func newAssets(fsys fs.FS) (*assets, error) {
+// newAssets prepares the embedded files plus any generated ones, whose
+// contents depend on configuration and so cannot be embedded.
+func newAssets(fsys fs.FS, generated map[string][]byte) (*assets, error) {
 	files := make(map[string]asset)
-	all := sha256.New()
 
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -52,36 +54,55 @@ func newAssets(fsys fs.FS) (*assets, error) {
 		if err != nil {
 			return fmt.Errorf("read asset %s: %w", p, err)
 		}
-
-		all.Write([]byte(p))
-		all.Write(data)
-
-		sum := sha256.Sum256(data)
-		a := asset{
-			contentType: contentTypeFor(p),
-			plain:       data,
-			etag:        `"` + hex.EncodeToString(sum[:16]) + `"`,
-		}
-		gz, err := gzipBytes(data)
-		if err != nil {
-			return fmt.Errorf("compress asset %s: %w", p, err)
-		}
-		// Tiny files can grow: the gzip header costs more than it saves.
-		if len(gz) < len(data) {
-			a.gzipped = gz
-		}
-
-		files[p] = a
-		return nil
+		files[p], err = prepareAsset(p, data)
+		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+	for name, data := range generated {
+		if files[name], err = prepareAsset(name, data); err != nil {
+			return nil, err
+		}
 	}
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no static assets found")
 	}
 
+	// The version covers every file, so a changed brand colour invalidates
+	// the browser's copy. Names are hashed in order to keep it reproducible.
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	all := sha256.New()
+	for _, name := range names {
+		all.Write([]byte(name))
+		all.Write(files[name].plain)
+	}
+
 	return &assets{files: files, version: hex.EncodeToString(all.Sum(nil))[:12]}, nil
+}
+
+func prepareAsset(name string, data []byte) (asset, error) {
+	sum := sha256.Sum256(data)
+	a := asset{
+		contentType: contentTypeFor(name),
+		plain:       data,
+		etag:        `"` + hex.EncodeToString(sum[:16]) + `"`,
+	}
+
+	gz, err := gzipBytes(data)
+	if err != nil {
+		return asset{}, fmt.Errorf("compress asset %s: %w", name, err)
+	}
+	// Tiny files can grow: the gzip header costs more than it saves.
+	if len(gz) < len(data) {
+		a.gzipped = gz
+	}
+	return a, nil
 }
 
 // ServeHTTP writes an asset, gzipped when the client accepts it.

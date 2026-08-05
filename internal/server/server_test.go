@@ -126,6 +126,27 @@ func newTestServer(t *testing.T) *Server {
 	return srv
 }
 
+// newTestServerWithBrand builds a server whose assets were generated from the
+// given brand colour.
+func newTestServerWithBrand(t *testing.T, color string) *Server {
+	t.Helper()
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := wacky.NewStore(&fakeSource{files: map[string]string{"README.md": "# Handbook\n"}}, markdown.New(), log)
+	if err := store.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Default()
+	cfg.BrandColor = color
+
+	srv, err := New(cfg, store, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
+}
+
 func get(t *testing.T, srv *Server, target string, headers ...[2]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)

@@ -117,6 +117,52 @@ func TestStaticConditionalGet(t *testing.T) {
 	}
 }
 
+// The brand stylesheet is generated from configuration, so it cannot be
+// embedded — but it is served through the same pipeline as the embedded ones.
+func TestBrandStylesheetIsServed(t *testing.T) {
+	srv := newTestServer(t)
+	srv.cfg.BrandColor = "#c8102e"
+
+	rec := get(t, srv, "/static/brand.css")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /static/brand.css = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		t.Errorf("Content-Type = %q, want text/css", ct)
+	}
+	if rec.Header().Get("ETag") == "" {
+		t.Error("no ETag on the brand stylesheet")
+	}
+
+	css := rec.Body.String()
+	// newTestServer built its assets from the default colour.
+	if !strings.Contains(css, "--brand:#1f5fa8;") {
+		t.Errorf("brand stylesheet does not carry the configured colour: %q", css)
+	}
+
+	// Every page links it, versioned like the rest.
+	body := get(t, srv, "/wacky/docs/setup").Body.String()
+	if !strings.Contains(body, `href="/static/brand.css?v=`+srv.assets.version+`"`) {
+		t.Error("the page does not link the versioned brand stylesheet")
+	}
+}
+
+// A different brand colour must change the asset version, or browsers would
+// keep the previous header colour.
+func TestBrandColorChangesTheAssetVersion(t *testing.T) {
+	first := newTestServerWithBrand(t, "#1f5fa8")
+	second := newTestServerWithBrand(t, "#c8102e")
+
+	if first.assets.version == second.assets.version {
+		t.Error("two brand colours produced the same asset version")
+	}
+	// The same colour must produce the same version, or every restart would
+	// pointlessly invalidate every cache.
+	if again := newTestServerWithBrand(t, "#1f5fa8"); again.assets.version != first.assets.version {
+		t.Error("the same brand colour produced a different asset version")
+	}
+}
+
 func TestStaticNotFound(t *testing.T) {
 	if rec := get(t, newTestServer(t), "/static/nope.css"); rec.Code != http.StatusNotFound {
 		t.Errorf("GET /static/nope.css = %d, want 404", rec.Code)

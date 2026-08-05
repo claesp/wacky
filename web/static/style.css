@@ -12,6 +12,9 @@
   --radius: 4px;
 
   --topbar-height: 4rem;
+  --brand: #1f5fa8;
+  --brand-light: #6a9bd4;
+  --brand-text: #ffffff;
   --serif: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", Times, serif;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -78,19 +81,19 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
   align-items: baseline;
   gap: 1rem;
   padding: 0.85rem 1.5rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.16);
+  background: linear-gradient(102deg, var(--brand) 0%, var(--brand-light) 100%);
   position: sticky;
   top: 0;
   z-index: 5;
 }
 
 .brand {
-  font-family: var(--serif);
-  font-size: 1.3rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--fg);
+  font-family: var(--font);
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--brand-text);
 }
 
 .menu-button {
@@ -104,20 +107,19 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
   margin-right: -0.25rem;
   border: 1px solid transparent;
   border-radius: var(--radius);
-  color: var(--fg);
+  color: var(--brand-text);
   cursor: pointer;
 }
 .menu-button svg { fill: currentColor; display: block; }
-.menu-button:hover { border-color: var(--border); color: var(--accent); }
+.menu-button:hover { border-color: currentColor; }
 
 .menu-toggle:focus-visible ~ .topbar .menu-button {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand-text);
   outline-offset: 2px;
 }
 .menu-toggle:checked ~ .topbar .menu-button {
-  background: var(--accent-soft);
-  border-color: var(--border);
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: currentColor;
 }
 
 .search {
@@ -144,8 +146,8 @@ a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
   font-size: 0.8rem;
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--brand-text);
 }
 
 .classification {

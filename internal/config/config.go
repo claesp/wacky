@@ -26,6 +26,8 @@ const (
 	DefaultAddr            = "127.0.0.1:8080"
 	DefaultRepoPath        = "."
 	DefaultOwner           = "The Authors"
+	DefaultTitle           = "Wacky"
+	DefaultBrandColor      = "#1f5fa8"
 	DefaultReloadInterval  = 15 * time.Second
 	DefaultReadTimeout     = 10 * time.Second
 	DefaultWriteTimeout    = 30 * time.Second
@@ -47,6 +49,8 @@ type Config struct {
 	Ref string
 	// Title is the site name shown in the header and page titles.
 	Title string
+	// BrandColor is the "#rrggbb" the header gradient is built from.
+	BrandColor string
 	// Owner names the copyright holder in the site footer. Empty means no
 	// copyright notice is shown.
 	Owner string
@@ -84,6 +88,8 @@ func Default() Config {
 		Addr:            DefaultAddr,
 		RepoPath:        DefaultRepoPath,
 		Owner:           DefaultOwner,
+		Title:           DefaultTitle,
+		BrandColor:      DefaultBrandColor,
 		ReloadInterval:  DefaultReloadInterval,
 		ReadTimeout:     DefaultReadTimeout,
 		WriteTimeout:    DefaultWriteTimeout,
@@ -125,7 +131,9 @@ func Load(args []string, getenv func(string) string, output io.Writer) (Config, 
 	fs.StringVar(&cfg.Addr, "addr", envString(getenv, "WACKY_ADDR", cfg.Addr), "address to listen on")
 	fs.StringVar(&cfg.RepoPath, "repo", envString(getenv, "WACKY_REPO", cfg.RepoPath), "path to the Git repository to serve")
 	fs.StringVar(&cfg.Ref, "ref", envString(getenv, "WACKY_REF", cfg.Ref), "Git revision to serve (default: the working tree)")
-	fs.StringVar(&cfg.Title, "title", envString(getenv, "WACKY_TITLE", cfg.Title), "site title (default: repository directory name)")
+	fs.StringVar(&cfg.Title, "title", envString(getenv, "WACKY_TITLE", cfg.Title), "site title")
+	fs.StringVar(&cfg.BrandColor, "brand-color", envString(getenv, "WACKY_BRAND_COLOR", cfg.BrandColor),
+		"header colour as an RGB hex string, e.g. #1f5fa8")
 	fs.StringVar(&cfg.Owner, "owner", envString(getenv, "WACKY_OWNER", cfg.Owner), "copyright holder shown in the footer")
 	fs.StringVar(&cfg.CommitURL, "commit-url", envString(getenv, "WACKY_COMMIT_URL", cfg.CommitURL),
 		"base URL a commit hash is appended to, e.g. https://github.com/org/repo/commit/ (default: hashes are not linked)")
@@ -203,8 +211,13 @@ func (c *Config) normalize() error {
 	c.RepoPath = abs
 
 	if strings.TrimSpace(c.Title) == "" {
-		c.Title = filepath.Base(abs)
+		c.Title = DefaultTitle
 	}
+	brand, err := normalizeHexColor(c.BrandColor)
+	if err != nil {
+		return err
+	}
+	c.BrandColor = brand
 	// An explicitly blank owner falls back to the default rather than
 	// dropping the copyright notice.
 	if c.Owner = strings.TrimSpace(c.Owner); c.Owner == "" {
@@ -262,6 +275,28 @@ func (c *Config) normalizeCommitURL() error {
 		c.CommitURL += "/"
 	}
 	return nil
+}
+
+// normalizeHexColor accepts "#rgb" or "#rrggbb", with or without the hash,
+// and returns the canonical "#rrggbb" form.
+func normalizeHexColor(raw string) (string, error) {
+	digits := strings.TrimPrefix(strings.TrimSpace(raw), "#")
+	if digits == "" {
+		return DefaultBrandColor, nil
+	}
+
+	for _, r := range digits {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return "", fmt.Errorf("brand-color %q: %q is not a hex digit", raw, r)
+		}
+	}
+	if len(digits) == 3 {
+		digits = string([]byte{digits[0], digits[0], digits[1], digits[1], digits[2], digits[2]})
+	}
+	if len(digits) != 6 {
+		return "", fmt.Errorf("brand-color %q must be 3 or 6 hex digits, e.g. #1f5fa8", raw)
+	}
+	return "#" + strings.ToLower(digits), nil
 }
 
 // optionalInt parses a setting that may be left unset, which a plain integer

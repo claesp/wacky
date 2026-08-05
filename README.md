@@ -38,7 +38,8 @@ wacky [flags] [repository-path]
 | `-addr` | `WACKY_ADDR` | `127.0.0.1:8080` | Listen address |
 | `-repo` | `WACKY_REPO` | `.` | Repository (or sub-directory) to serve |
 | `-ref` | `WACKY_REF` | working tree | Serve a pinned branch, tag or commit |
-| `-title` | `WACKY_TITLE` | directory name | Site title |
+| `-title` | `WACKY_TITLE` | `Wacky` | Site title |
+| `-brand-color` | `WACKY_BRAND_COLOR` | `#1f5fa8` | Header colour as an RGB hex string; the gradient and brand text derive from it |
 | `-owner` | `WACKY_OWNER` | `The Authors` | Copyright holder in the footer |
 | `-commit-url` | `WACKY_COMMIT_URL` | none | Base URL a commit hash is appended to, e.g. `https://github.com/org/repo/commit/` |
 | `-classification-threshold-low` | `WACKY_CLASSIFICATION_THRESHOLD_LOW` | unset | `classification_level` at which a page carries a notice |

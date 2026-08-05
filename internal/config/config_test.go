@@ -30,8 +30,11 @@ func TestLoadDefaults(t *testing.T) {
 	if !filepath.IsAbs(cfg.RepoPath) {
 		t.Errorf("RepoPath = %q, want an absolute path", cfg.RepoPath)
 	}
-	if cfg.Title != filepath.Base(cfg.RepoPath) {
-		t.Errorf("Title = %q, want the repository directory name", cfg.Title)
+	if cfg.Title != DefaultTitle {
+		t.Errorf("Title = %q, want %q", cfg.Title, DefaultTitle)
+	}
+	if cfg.BrandColor != DefaultBrandColor {
+		t.Errorf("BrandColor = %q, want %q", cfg.BrandColor, DefaultBrandColor)
 	}
 	if cfg.LogLevel != slog.LevelInfo {
 		t.Errorf("LogLevel = %v, want info", cfg.LogLevel)
@@ -89,6 +92,44 @@ func TestCommitURL(t *testing.T) {
 	}
 	if cfg.CommitURL != "https://example.com/c/" {
 		t.Errorf("CommitURL from the environment = %q", cfg.CommitURL)
+	}
+}
+
+func TestBrandColor(t *testing.T) {
+	dir := t.TempDir()
+
+	valid := map[string]string{
+		"#1f5fa8": "#1f5fa8",
+		"1f5fa8":  "#1f5fa8",
+		"#1F5FA8": "#1f5fa8",
+		"#abc":    "#aabbcc",
+		"abc":     "#aabbcc",
+		"  #fff ": "#ffffff",
+		"":        DefaultBrandColor,
+	}
+	for in, want := range valid {
+		cfg, err := Load([]string{"-brand-color", in, dir}, env(nil), io.Discard)
+		if err != nil {
+			t.Errorf("Load(-brand-color %q): %v", in, err)
+			continue
+		}
+		if cfg.BrandColor != want {
+			t.Errorf("BrandColor for %q = %q, want %q", in, cfg.BrandColor, want)
+		}
+	}
+
+	for _, bad := range []string{"#12345", "#gggggg", "blue", "#1f5fa8ff", "##fff"} {
+		if _, err := Load([]string{"-brand-color", bad, dir}, env(nil), io.Discard); err == nil {
+			t.Errorf("Load(-brand-color %q) succeeded, want an error", bad)
+		}
+	}
+
+	cfg, err := Load([]string{dir}, env(map[string]string{"WACKY_BRAND_COLOR": "#c8102e"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BrandColor != "#c8102e" {
+		t.Errorf("BrandColor from the environment = %q", cfg.BrandColor)
 	}
 }
 

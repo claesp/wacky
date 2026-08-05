@@ -45,7 +45,7 @@ func New(cfg config.Config, store *wacky.Store, log *slog.Logger) (*Server, erro
 	if err != nil {
 		return nil, fmt.Errorf("static assets: %w", err)
 	}
-	static, err := newAssets(staticFS)
+	static, err := newAssets(staticFS, map[string][]byte{"brand.css": brandCSS(cfg.BrandColor)})
 	if err != nil {
 		return nil, fmt.Errorf("static assets: %w", err)
 	}
